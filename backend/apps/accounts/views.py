@@ -282,11 +282,20 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class UserCreateView(generics.CreateAPIView):
     """
-    Create a new user (Admin only).
+    Create a new user (Admin only). Sends a welcome email with credentials.
     """
     queryset = User.objects.all()
     serializer_class = AdminUserSerializer
     permission_classes = [IsAdminUser]
+
+    def perform_create(self, serializer):
+        # Grab the plain-text password before the serializer hashes it
+        password = self.request.data.get('password', '')
+        # Admin-created users are automatically email-verified
+        instance = serializer.save(email_verified=True)
+        if password and instance.email:
+            from apps.accounts.emails import send_welcome_email
+            send_welcome_email(instance, password)
 
 
 class UserSearchView(generics.ListAPIView):

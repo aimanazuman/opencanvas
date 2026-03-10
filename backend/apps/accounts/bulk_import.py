@@ -181,6 +181,7 @@ def process_bulk_import(rows, course_id, send_emails=True, created_by=None):
                     last_name=row.get('last_name', ''),
                     role='student',
                     storage_quota=default_quota,
+                    email_verified=True,
                 )
 
                 results['created'].append({
