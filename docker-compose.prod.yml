@@ -99,10 +99,12 @@ services:
       - internal
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.backend.rule=Host(`YOUR_DOMAIN`) && (PathPrefix(`/api`) || PathPrefix(`/admin`) || PathPrefix(`/media`) || PathPrefix(`/static`))"
+      - "traefik.http.routers.backend.rule=Host(`YOUR_DOMAIN`) && (PathPrefix(`/api`) || PathPrefix(`/admin`) || PathPrefix(`/media`))"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
+      - "traefik.http.routers.backend.priority=100"
+      - "traefik.docker.network=opencanvas_web"
 
   # ── React Frontend ──────────────────────────────
   frontend:
@@ -123,19 +125,6 @@ services:
       # Lower priority so backend routes match first
       - "traefik.http.routers.frontend.priority=1"
 
-  # ── Watchtower (auto-deploy on image update) ────
-  watchtower:
-    image: containrrr/watchtower
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=300
-      - WATCHTOWER_ROLLING_RESTART=true
-      - WATCHTOWER_INCLUDE_STOPPED=false
-    restart: unless-stopped
-    networks:
-      - internal
 
 # ── Secrets ─────────────────────────────────────
 secrets:

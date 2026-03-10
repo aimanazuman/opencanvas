@@ -42,60 +42,61 @@ function WorkspaceContent({ onNavigate }) {
     const fetchBoard = async () => {
       // Try loading existing board by ID
       if (boardId) {
+        // Guest boards stored locally: try localStorage first, then fall through to API
         if (isGuest) {
-          // Guest: load from localStorage
           const guestBoard = getGuestBoardById(boardId);
           if (guestBoard) {
             loadBoard(guestBoard);
             return;
           }
-        } else {
-          // Authenticated: load from API
-          try {
-            const response = await boardsApi.get(boardId);
-            const serverBoard = response.data;
+        }
 
-            // Set permissions from server response
-            setCanEdit(serverBoard.can_edit !== false);
-            setCanComment(serverBoard.can_comment !== false);
-            if (serverBoard.course_name) setCourseName(serverBoard.course_name);
-            if (serverBoard.section) setSectionName(serverBoard.section);
+        // Load from API (for authenticated users AND guests accessing shared boards)
+        try {
+          const response = await boardsApi.get(boardId);
+          const serverBoard = response.data;
 
-            // If board has content with board data, use content as the board
-            // Otherwise, construct from server fields
-            const boardData = serverBoard.content && Object.keys(serverBoard.content).length > 0
-              ? {
-                  ...serverBoard.content,
-                  id: serverBoard.id,
-                  name: serverBoard.content.name || serverBoard.name,
-                  type: serverBoard.content.type || serverBoard.board_type || 'course-material',
-                  board_type: serverBoard.board_type,
-                  updated_at: serverBoard.updated_at,
-                }
-              : {
-                  id: serverBoard.id,
-                  name: serverBoard.name,
-                  type: serverBoard.board_type || 'course-material',
-                  board_type: serverBoard.board_type,
-                  course_name: serverBoard.course_name,
-                  updated_at: serverBoard.updated_at,
-                };
+          // Set permissions from server response
+          setCanEdit(serverBoard.can_edit !== false);
+          setCanComment(serverBoard.can_comment !== false);
+          if (serverBoard.course_name) setCourseName(serverBoard.course_name);
+          if (serverBoard.section) setSectionName(serverBoard.section);
 
-            // If template type is provided and content is empty, create from template
-            if (templateType && (!serverBoard.content || Object.keys(serverBoard.content).length === 0)) {
-              const templateBoard = createBoardFromTemplate(templateType);
-              if (templateBoard) {
-                templateBoard.id = serverBoard.id;
-                loadBoard(templateBoard);
-                return;
+          // Always trust serverBoard.board_type from the database over content.type
+          const resolvedType = serverBoard.board_type || serverBoard.content?.type || 'course-material';
+          const boardData = serverBoard.content && Object.keys(serverBoard.content).length > 0
+            ? {
+                ...serverBoard.content,
+                id: serverBoard.id,
+                name: serverBoard.content.name || serverBoard.name,
+                type: resolvedType,
+                board_type: serverBoard.board_type,
+                updated_at: serverBoard.updated_at,
               }
-            }
+            : {
+                id: serverBoard.id,
+                name: serverBoard.name,
+                type: resolvedType,
+                board_type: serverBoard.board_type,
+                course_name: serverBoard.course_name,
+                updated_at: serverBoard.updated_at,
+              };
 
-            loadBoard(boardData);
-            return;
-          } catch (err) {
-            console.error('Failed to load board from API:', err);
+          // If template type is provided and content is empty, create from template
+          if (templateType && (!serverBoard.content || Object.keys(serverBoard.content).length === 0)) {
+            const templateBoard = createBoardFromTemplate(templateType);
+            if (templateBoard) {
+              templateBoard.id = serverBoard.id;
+              loadBoard(templateBoard);
+              return;
+            }
           }
+
+          loadBoard(boardData);
+          return;
+        } catch (err) {
+          console.error('Failed to load board from API:', err);
+        }
         }
       }
 
@@ -265,7 +266,7 @@ function WorkspaceContent({ onNavigate }) {
               ...restoredBoard.content,
               id: restoredBoard.id,
               name: restoredBoard.content.name || restoredBoard.name,
-              type: restoredBoard.content.type || restoredBoard.board_type || 'course-material',
+              type: restoredBoard.board_type || restoredBoard.content.type || 'course-material',
               board_type: restoredBoard.board_type,
               updated_at: restoredBoard.updated_at,
             };
