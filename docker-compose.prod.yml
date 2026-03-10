@@ -13,7 +13,7 @@
 # └─────────────────────────────────────────────────────────────────┘
 
 services:
-  # ── Reverse Proxy + TLS ──────────────────────────
+  # Reverse Proxy + TLS
   traefik:
     image: traefik:v3.1
     command:
@@ -40,7 +40,7 @@ services:
     networks:
       - web
 
-  # ── MySQL Database ──────────────────────────────
+  # MySQL Database
   db:
     image: mysql:8.0
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4
@@ -60,7 +60,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Django Backend ──────────────────────────────
+  # Django Backend
   backend:
     build:
       context: ./backend
@@ -106,7 +106,7 @@ services:
       - "traefik.http.routers.backend.priority=100"
       - "traefik.docker.network=opencanvas_web"
 
-  # ── React Frontend ──────────────────────────────
+  # React Frontend
   frontend:
     build:
       context: ./frontend
@@ -126,7 +126,7 @@ services:
       - "traefik.http.routers.frontend.priority=1"
 
 
-# ── Secrets ─────────────────────────────────────
+# Secrets
 secrets:
   db_password:
     file: ~/secrets/db_password.txt
@@ -135,11 +135,11 @@ secrets:
   smtp_password:
     file: ~/secrets/smtp_password.txt
 
-# ── Volumes ─────────────────────────────────────
+# Volumes
 volumes:
   letsencrypt:
 
-# ── Networks ────────────────────────────────────
+# Networks
 networks:
   web:
     driver: bridge

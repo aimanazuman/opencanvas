@@ -97,7 +97,6 @@ function WorkspaceContent({ onNavigate }) {
         } catch (err) {
           console.error('Failed to load board from API:', err);
         }
-        }
       }
 
       // Create from template
