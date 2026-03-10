@@ -161,6 +161,9 @@ export const adminApi = {
   getLargeFiles: () => api.get('/files/large-files/'),
   getUserStorage: (params) => api.get('/files/user-storage/', { params }),
 
+  // File Management
+  deleteFile: (id, data) => api.delete(`/files/admin-delete/${id}/`, { data }),
+
   // Guest Accounts
   getGuestAccounts: () => api.get('/accounts/guests/'),
   cleanupGuests: () => api.post('/accounts/guests/cleanup/'),

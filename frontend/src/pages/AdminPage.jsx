@@ -101,6 +101,10 @@ function AdminPage({ onNavigate }) {
   const [savingUser, setSavingUser] = useState(false);
   const [userError, setUserError] = useState('');
   const [showBulkImport, setShowBulkImport] = useState(false);
+  const [showFileDeleteModal, setShowFileDeleteModal] = useState(null); // file object or null
+  const [fileDeleteReason, setFileDeleteReason] = useState('');
+  const [fileDeleteCustomMessage, setFileDeleteCustomMessage] = useState('');
+  const [deletingFile, setDeletingFile] = useState(false);
 
   const menuItems = [
     { id: 'dashboard', icon: Layout, label: 'Dashboard' },
@@ -177,6 +181,28 @@ function AdminPage({ onNavigate }) {
       toast.error('Failed to cleanup guest accounts');
     } finally {
       setCleaningGuests(false);
+    }
+  };
+
+  const handleAdminDeleteFile = async () => {
+    if (!showFileDeleteModal || !fileDeleteReason) return;
+    setDeletingFile(true);
+    try {
+      await adminApi.deleteFile(showFileDeleteModal.id, {
+        reason: fileDeleteReason,
+        message: fileDeleteCustomMessage,
+      });
+      toast.success(`File "${showFileDeleteModal.name}" deleted successfully`);
+      setShowFileDeleteModal(null);
+      setFileDeleteReason('');
+      setFileDeleteCustomMessage('');
+      loadLargeFiles();
+      loadStorageStats();
+      loadUserStorage();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete file');
+    } finally {
+      setDeletingFile(false);
     }
   };
 
@@ -934,6 +960,7 @@ function AdminPage({ onNavigate }) {
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Size</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Owner</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600">Type</th>
+                  <th className="px-6 py-3 text-right text-sm font-medium text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -948,17 +975,100 @@ function AdminPage({ onNavigate }) {
                     <td className="px-6 py-4 text-gray-600">{file.size_display}</td>
                     <td className="px-6 py-4 text-gray-600">{file.owner}</td>
                     <td className="px-6 py-4 text-gray-500 capitalize">{file.file_type}</td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => {
+                          setShowFileDeleteModal(file);
+                          setFileDeleteReason('');
+                          setFileDeleteCustomMessage('');
+                        }}
+                        className="text-red-600 hover:text-red-800 transition p-1 rounded hover:bg-red-50"
+                        aria-label={`Delete file ${file.name}`}
+                        title="Delete file"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {largeFiles.length === 0 && (
                   <tr>
-                    <td colSpan="4" className="px-6 py-8 text-center text-gray-400">No files found</td>
+                    <td colSpan="5" className="px-6 py-8 text-center text-gray-400">No files found</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
+
+        {/* File Delete Modal */}
+        {showFileDeleteModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-backdropFade" role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') setShowFileDeleteModal(null); }}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md animate-scaleIn">
+              <div className="p-6">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Delete File</h3>
+                </div>
+                <p className="text-gray-600 mb-1">
+                  You are about to delete <strong>{showFileDeleteModal.name}</strong> ({showFileDeleteModal.size_display}) owned by <strong>{showFileDeleteModal.owner}</strong>.
+                </p>
+                <p className="text-sm text-gray-500 mb-4">The owner will receive a notification with the reason.</p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Reason *</label>
+                    <select
+                      value={fileDeleteReason}
+                      onChange={(e) => setFileDeleteReason(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    >
+                      <option value="">Select a reason...</option>
+                      <option value="Pornography or sexually explicit content">Pornography or sexually explicit content</option>
+                      <option value="Violence or graphic content">Violence or graphic content</option>
+                      <option value="Copyright infringement">Copyright infringement</option>
+                      <option value="Harassment or hate speech">Harassment or hate speech</option>
+                      <option value="Spam or misleading content">Spam or misleading content</option>
+                      <option value="Malware or security threat">Malware or security threat</option>
+                      <option value="Inappropriate content">Inappropriate content</option>
+                      <option value="Storage policy violation">Storage policy violation</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Additional message (optional)</label>
+                    <textarea
+                      value={fileDeleteCustomMessage}
+                      onChange={(e) => setFileDeleteCustomMessage(e.target.value)}
+                      placeholder="Provide additional details for the user..."
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 mt-6">
+                  <button
+                    onClick={() => setShowFileDeleteModal(null)}
+                    className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAdminDeleteFile}
+                    disabled={!fileDeleteReason || deletingFile}
+                    className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deletingFile ? 'Deleting...' : 'Delete File'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </>
     );
   };

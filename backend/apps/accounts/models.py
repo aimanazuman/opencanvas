@@ -127,6 +127,7 @@ class Notification(models.Model):
         ('quota_changed', 'Quota Changed'),
         ('storage_warning', 'Storage Warning'),
         ('guest_account_expiry', 'Guest Account Expiry'),
+        ('file_deleted', 'File Deleted'),
     ]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')

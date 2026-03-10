@@ -112,6 +112,61 @@ class FileViewSet(viewsets.ModelViewSet):
         })
 
 
+class AdminFileDeleteView(APIView):
+    """
+    Admin-only endpoint to delete a file with a reason/notice sent to the owner.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, pk):
+        if request.user.role != 'admin':
+            return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            file_obj = File.objects.get(pk=pk, is_deleted=False)
+        except File.DoesNotExist:
+            return Response({'error': 'File not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        reason = request.data.get('reason', 'Policy violation')
+        custom_message = request.data.get('message', '')
+
+        # Build the notification message
+        notice_message = f'Your file "{file_obj.name}" ({file_obj.size_mb:.1f} MB) has been removed by an administrator.\n\nReason: {reason}'
+        if custom_message:
+            notice_message += f'\n\nAdditional details: {custom_message}'
+
+        # Soft-delete and update storage
+        file_obj.is_deleted = True
+        file_obj.save()
+
+        owner = file_obj.uploaded_by
+        owner.storage_used -= file_obj.file_size
+        if owner.storage_used < 0:
+            owner.storage_used = 0
+        owner.save()
+
+        # Notify the file owner
+        Notification.objects.create(
+            user=owner,
+            type='file_deleted',
+            title='File Removed by Administrator',
+            message=notice_message,
+            related_user=request.user,
+        )
+
+        log_action(request.user, 'delete', 'file', file_obj.id, {
+            'name': file_obj.name,
+            'size': file_obj.file_size,
+            'owner': owner.username,
+            'reason': reason,
+        }, request)
+
+        return Response({
+            'message': f'File "{file_obj.name}" deleted successfully.',
+            'storage_freed': file_obj.file_size,
+        })
+
+
 class StorageStatsView(APIView):
     """
     Admin-only endpoint for system-wide storage statistics.
