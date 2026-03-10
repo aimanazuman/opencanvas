@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   UserPlus, Search, Filter, Eye, Mail, X, Users, Upload, Edit3, Check, ChevronDown, Calendar
 } from 'lucide-react';
-import { enrollmentsApi, usersApi } from '../../services/api';
+import { enrollmentsApi, usersApi, coursesApi } from '../../services/api';
 import { useLecturerData, formatTimeAgo } from '../../hooks/useLecturerData';
 import BulkImportModal from '../../components/BulkImportModal';
 
@@ -20,10 +20,11 @@ export default function LecturerStudentsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [studentQuery, setStudentQuery] = useState('');
   const [studentResults, setStudentResults] = useState([]);
-  const [selectedStudentId, setSelectedStudentId] = useState(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
   const [courseId, setCourseId] = useState('');
   const [section, setSection] = useState('');
   const [adding, setAdding] = useState(false);
+  const [addResult, setAddResult] = useState(null);
 
   // Inline editing
   const [editingId, setEditingId] = useState(null);
@@ -73,28 +74,52 @@ export default function LecturerStudentsPage() {
     }
   };
 
+  const toggleStudentSelection = (id) => {
+    setSelectedStudentIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const handleAddStudent = async () => {
-    if (!selectedStudentId || !courseId) return;
+    if (selectedStudentIds.size === 0 || !courseId) return;
     setAdding(true);
+    setAddResult(null);
     try {
-      await enrollmentsApi.create({
-        student: selectedStudentId,
-        course: parseInt(courseId),
-        section,
-      });
-      setShowAddModal(false);
-      setStudentQuery('');
-      setStudentResults([]);
-      setSelectedStudentId(null);
-      setCourseId('');
-      setSection('');
+      if (selectedStudentIds.size === 1) {
+        const [studentId] = selectedStudentIds;
+        await enrollmentsApi.create({
+          student: studentId,
+          course: parseInt(courseId),
+          section,
+        });
+        setAddResult({ enrolled: 1, already_enrolled: 0, errors: 0 });
+      } else {
+        const res = await coursesApi.bulkEnroll(parseInt(courseId), {
+          student_ids: Array.from(selectedStudentIds),
+          section,
+        });
+        setAddResult(res.data);
+      }
       loadEnrollments();
       loadCourses();
     } catch (err) {
-      alert(err.response?.data?.non_field_errors?.[0] || err.response?.data?.detail || 'Failed to enroll student');
+      alert(err.response?.data?.non_field_errors?.[0] || err.response?.data?.detail || err.response?.data?.error || 'Failed to enroll student(s)');
     } finally {
       setAdding(false);
     }
+  };
+
+  const closeAddModal = () => {
+    setShowAddModal(false);
+    setStudentQuery('');
+    setStudentResults([]);
+    setSelectedStudentIds(new Set());
+    setCourseId('');
+    setSection('');
+    setAddResult(null);
   };
 
   const startEdit = (student) => {
@@ -532,44 +557,68 @@ export default function LecturerStudentsPage() {
 
       {/* Add Student Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-backdropFade">
           <div className="bg-white rounded-xl w-full max-w-md animate-scaleIn">
             <div className="p-6 border-b">
               <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-gray-900">Add Student</h3>
-                <button onClick={() => { setShowAddModal(false); setStudentResults([]); setSelectedStudentId(null); }} className="p-1 hover:bg-gray-100 rounded">
+                <h3 className="text-xl font-bold text-gray-900">Add Students</h3>
+                <button onClick={closeAddModal} className="p-1 hover:bg-gray-100 rounded">
                   <X className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
             </div>
             <div className="p-6 space-y-4">
+              {addResult && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+                  {addResult.enrolled} student(s) enrolled successfully.
+                  {addResult.already_enrolled > 0 && ` ${addResult.already_enrolled} already enrolled.`}
+                  {addResult.errors > 0 && ` ${addResult.errors} failed.`}
+                </div>
+              )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Search Student</label>
-                <input
-                  type="text" value={studentQuery}
-                  onChange={(e) => handleSearchStudent(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Search by name or email..."
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search Students</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text" value={studentQuery}
+                    onChange={(e) => handleSearchStudent(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Search by name or email..."
+                  />
+                </div>
                 {studentResults.length > 0 && (
-                  <div className="mt-2 border rounded-lg max-h-32 overflow-y-auto">
-                    {studentResults.map(u => (
-                      <button
-                        key={u.id}
-                        onClick={() => {
-                          setSelectedStudentId(u.id);
-                          setStudentQuery(`${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username);
-                          setStudentResults([]);
-                        }}
-                        className={`w-full text-left px-3 py-2 hover:bg-indigo-50 text-sm ${selectedStudentId === u.id ? 'bg-indigo-50' : ''}`}
-                      >
-                        <span className="font-medium">{u.first_name} {u.last_name}</span>
-                        <span className="text-gray-500 ml-2">{u.email}</span>
-                      </button>
-                    ))}
+                  <div className="mt-2 border rounded-lg max-h-40 overflow-y-auto">
+                    {studentResults.map(u => {
+                      const isSelected = selectedStudentIds.has(u.id);
+                      return (
+                        <button
+                          key={u.id}
+                          onClick={() => toggleStudentSelection(u.id)}
+                          className={`w-full text-left px-3 py-2 hover:bg-indigo-50 text-sm flex items-center space-x-2 ${isSelected ? 'bg-indigo-50' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium">{u.first_name} {u.last_name}</span>
+                            <span className="text-gray-500 ml-2 text-xs">{u.email}</span>
+                            {u.role && u.role !== 'student' && (
+                              <span className="ml-2 px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">{u.role}</span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
-                {selectedStudentId && <p className="text-sm text-green-600 mt-1">Student selected</p>}
+                {selectedStudentIds.size > 0 && (
+                  <p className="text-sm text-green-600 mt-1">
+                    {selectedStudentIds.size} student{selectedStudentIds.size !== 1 ? 's' : ''} selected
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
@@ -597,9 +646,9 @@ export default function LecturerStudentsPage() {
               </div>
             </div>
             <div className="p-6 border-t flex space-x-3">
-              <button onClick={() => { setShowAddModal(false); setStudentResults([]); setSelectedStudentId(null); }} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium">Cancel</button>
-              <button onClick={handleAddStudent} disabled={adding || !selectedStudentId || !courseId} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium disabled:opacity-50">
-                {adding ? 'Enrolling...' : 'Add Student'}
+              <button onClick={closeAddModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium">Cancel</button>
+              <button onClick={handleAddStudent} disabled={adding || selectedStudentIds.size === 0 || !courseId} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium disabled:opacity-50">
+                {adding ? 'Enrolling...' : `Add ${selectedStudentIds.size || ''} Student${selectedStudentIds.size !== 1 ? 's' : ''}`}
               </button>
             </div>
           </div>

@@ -5,7 +5,8 @@ import {
   ChevronDown, ChevronRight, Search, UserPlus, Edit, Trash2,
   X, Download,
   RefreshCw, Globe, Lock, Save,
-  FileText, Image, Video, Filter, ChevronLeft, Upload
+  FileText, Image, Video, Filter, ChevronLeft, Upload,
+  UserX, Clock, AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usersApi, adminApi } from '../services/api';
@@ -71,6 +72,8 @@ function AdminPage({ onNavigate }) {
   const [largeFiles, setLargeFiles] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [userStorageData, setUserStorageData] = useState([]);
+  const [guestAccounts, setGuestAccounts] = useState({ total: 0, expired: 0, guests: [] });
+  const [cleaningGuests, setCleaningGuests] = useState(false);
   const [userStorageSort, setUserStorageSort] = useState('storage_used');
   const [systemSettings, setSystemSettings] = useState({
     siteName: 'OpenCanvas',
@@ -102,6 +105,7 @@ function AdminPage({ onNavigate }) {
   const menuItems = [
     { id: 'dashboard', icon: Layout, label: 'Dashboard' },
     { id: 'users', icon: Users, label: 'User Management' },
+    { id: 'guests', icon: UserX, label: 'Guest Accounts' },
     { id: 'storage', icon: HardDrive, label: 'Storage Management' },
     { id: 'settings', icon: Settings, label: 'System Settings' },
     { id: 'logs', icon: FileText, label: 'Logs & Audit' },
@@ -152,6 +156,29 @@ function AdminPage({ onNavigate }) {
       console.error('Failed to load large files:', err);
     }
   }, []);
+
+  const loadGuestAccounts = useCallback(async () => {
+    try {
+      const res = await adminApi.getGuestAccounts();
+      setGuestAccounts(res.data);
+    } catch (err) {
+      console.error('Failed to load guest accounts:', err);
+    }
+  }, []);
+
+  const handleCleanupGuests = async () => {
+    setCleaningGuests(true);
+    try {
+      const res = await adminApi.cleanupGuests();
+      toast.success(res.data.message);
+      loadGuestAccounts();
+      loadDashboardStats();
+    } catch (err) {
+      toast.error('Failed to cleanup guest accounts');
+    } finally {
+      setCleaningGuests(false);
+    }
+  };
 
   const loadSettings = useCallback(async () => {
     try {
@@ -206,8 +233,10 @@ function AdminPage({ onNavigate }) {
       loadLogs();
     } else if (activeMenu === 'users') {
       loadUsers();
+    } else if (activeMenu === 'guests') {
+      loadGuestAccounts();
     }
-  }, [activeMenu, loadStorageStats, loadLargeFiles, loadUserStorage, loadLogs, loadUsers]);
+  }, [activeMenu, loadStorageStats, loadLargeFiles, loadUserStorage, loadLogs, loadUsers, loadGuestAccounts]);
 
   // Reload users when search/filter changes
   useEffect(() => {
@@ -394,6 +423,7 @@ function AdminPage({ onNavigate }) {
     { label: 'Total Users', value: dashboardStats?.total_users || 0, change: `${dashboardStats?.users_by_role?.students || 0} students`, icon: Users, color: 'indigo' },
     { label: 'Active Boards', value: dashboardStats?.total_boards || 0, change: `${dashboardStats?.total_courses || 0} courses`, icon: Folder, color: 'green' },
     { label: 'Storage Used', value: formatStorageSizeShort(dashboardStats?.storage_used_bytes || 0), change: `${dashboardStats?.storage_percentage || 0}% of quota`, icon: HardDrive, color: 'purple' },
+    { label: 'Guest Accounts', value: dashboardStats?.guest_users || 0, change: `${dashboardStats?.expired_guests || 0} expired`, icon: UserX, color: 'yellow', onClick: () => setActiveMenu('guests') },
   ];
 
   // Render Dashboard Content
@@ -414,9 +444,13 @@ function AdminPage({ onNavigate }) {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {stats.map((stat, idx) => (
-          <div key={idx} className="bg-white rounded-xl shadow-sm border p-6">
+          <div
+            key={idx}
+            className={`bg-white rounded-xl shadow-sm border p-6 ${stat.onClick ? 'cursor-pointer hover:shadow-md transition' : ''}`}
+            onClick={stat.onClick}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">{stat.label}</p>
@@ -580,6 +614,7 @@ function AdminPage({ onNavigate }) {
               <option value="admin">Admin</option>
               <option value="lecturer">Lecturer</option>
               <option value="student">Student</option>
+              <option value="guest">Guest</option>
             </select>
           </div>
         </div>
@@ -660,13 +695,20 @@ function AdminPage({ onNavigate }) {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
-                        u.role === 'admin' ? 'bg-red-100 text-red-700' :
-                        u.role === 'lecturer' ? 'bg-blue-100 text-blue-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {u.role}
-                      </span>
+                      <div className="flex items-center space-x-1.5">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
+                          u.role === 'admin' ? 'bg-red-100 text-red-700' :
+                          u.role === 'lecturer' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {u.role}
+                        </span>
+                        {u.is_guest && (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                            Guest
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1297,11 +1339,170 @@ function AdminPage({ onNavigate }) {
     );
   };
 
+  // Render Guest Accounts Management
+  const renderGuestManagement = () => {
+    const guests = guestAccounts.guests || [];
+    return (
+      <>
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Guest Accounts</h1>
+            <p className="text-gray-600 mt-1">Monitor and manage temporary guest accounts</p>
+          </div>
+          <div className="flex items-center space-x-3 self-start">
+            <button
+              onClick={loadGuestAccounts}
+              className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center space-x-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Refresh</span>
+            </button>
+            {guestAccounts.expired > 0 && (
+              <button
+                onClick={handleCleanupGuests}
+                disabled={cleaningGuests}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition flex items-center space-x-2 disabled:opacity-50"
+              >
+                <Trash2 className="w-5 h-5" />
+                <span>{cleaningGuests ? 'Cleaning...' : `Delete ${guestAccounts.expired} Expired`}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Guest Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white rounded-lg shadow-sm border p-4">
+            <p className="text-sm text-gray-600">Total Guests</p>
+            <p className="text-2xl font-bold text-gray-900">{guestAccounts.total}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border p-4">
+            <p className="text-sm text-gray-600">Active (not expired)</p>
+            <p className="text-2xl font-bold text-green-600">{guestAccounts.total - guestAccounts.expired}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border p-4">
+            <p className="text-sm text-gray-600">Expired</p>
+            <p className="text-2xl font-bold text-red-600">{guestAccounts.expired}</p>
+          </div>
+        </div>
+
+        {/* Info Banner */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-start space-x-3">
+          <Clock className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-blue-900">Guest accounts expire after 30 days</p>
+            <p className="text-sm text-blue-700 mt-0.5">
+              Guest users are prompted to create a permanent account. Expired accounts and their boards
+              can be deleted using the cleanup button above.
+            </p>
+          </div>
+        </div>
+
+        {/* Guest Accounts Table */}
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Username</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Created</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Expires</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Time Remaining</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Boards</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {guests.map((guest) => {
+                  const isExpired = guest.is_expired;
+                  const isUrgent = !isExpired && guest.days_remaining !== null && guest.days_remaining <= 7;
+                  return (
+                    <tr key={guest.id} className={`hover:bg-gray-50 ${isExpired ? 'bg-red-50' : ''}`}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-medium text-sm ${
+                            isExpired ? 'bg-red-400' : 'bg-gray-400'
+                          }`}>
+                            G
+                          </div>
+                          <span className="font-medium text-gray-900">{guest.username}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {new Date(guest.date_joined).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {guest.guest_expires_at
+                          ? new Date(guest.guest_expires_at).toLocaleDateString()
+                          : 'No expiry set'
+                        }
+                      </td>
+                      <td className="px-4 py-3">
+                        {isExpired ? (
+                          <span className="text-red-600 font-medium text-sm">Expired</span>
+                        ) : guest.days_remaining !== null ? (
+                          <div className="flex items-center space-x-2">
+                            {isUrgent && <AlertTriangle className="w-4 h-4 text-amber-500" />}
+                            <span className={`text-sm font-medium ${
+                              isUrgent ? 'text-amber-600' : 'text-gray-700'
+                            }`}>
+                              {guest.days_remaining} day{guest.days_remaining !== 1 ? 's' : ''}
+                            </span>
+                            {/* Progress bar */}
+                            <div className="w-20 bg-gray-200 rounded-full h-1.5">
+                              <div
+                                className={`h-1.5 rounded-full transition-all ${
+                                  guest.days_remaining <= 3 ? 'bg-red-500' :
+                                  guest.days_remaining <= 7 ? 'bg-amber-500' :
+                                  'bg-green-500'
+                                }`}
+                                style={{ width: `${Math.min(100, (guest.days_remaining / 30) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400">N/A</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{guest.boards_count}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          isExpired
+                            ? 'bg-red-100 text-red-700'
+                            : isUrgent
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                          {isExpired ? 'Expired' : isUrgent ? 'Expiring Soon' : 'Active'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {guests.length === 0 && (
+                  <tr>
+                    <td colSpan="6" className="px-4 py-8 text-center text-gray-400">
+                      No guest accounts found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="p-4 border-t">
+            <p className="text-sm text-gray-600">Showing {guests.length} guest account{guests.length !== 1 ? 's' : ''}</p>
+          </div>
+        </div>
+      </>
+    );
+  };
+
   // Render content based on active menu
   const renderContent = () => {
     switch (activeMenu) {
       case 'dashboard': return renderDashboard();
       case 'users': return renderUserManagement();
+      case 'guests': return renderGuestManagement();
       case 'storage': return renderStorageManagement();
       case 'settings': return renderSystemSettings();
       case 'logs': return renderLogs();

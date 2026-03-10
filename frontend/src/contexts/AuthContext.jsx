@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { authApi, boardsApi } from '../services/api';
 import { getGuestBoards, clearGuestBoards } from '../utils/guestStorage';
+import { sanitizeFormData } from '../utils/sanitize';
 
 const AuthContext = createContext(null);
 
@@ -100,9 +101,18 @@ export const AuthProvider = ({ children }) => {
       return { success: true, user: userData };
     } catch (error) {
       console.error('Login failed:', error);
+      // Handle email verification required
+      if (error.response?.status === 403 && error.response?.data?.requires_verification) {
+        return {
+          success: false,
+          requires_verification: true,
+          email: error.response.data.email,
+          error: error.response.data.message
+        };
+      }
       return {
         success: false,
-        error: error.response?.data?.non_field_errors?.[0] || error.response?.data?.detail || 'Login failed'
+        error: error.response?.data?.non_field_errors?.[0] || error.response?.data?.detail || error.response?.data?.message || 'Login failed'
       };
     }
   };
@@ -133,8 +143,13 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const response = await authApi.register(userData);
-      const { user: newUser, tokens } = response.data;
+      const response = await authApi.register(sanitizeFormData(userData));
+      const { user: newUser, tokens, requires_verification } = response.data;
+
+      if (requires_verification) {
+        // Account created but needs email verification — don't log in
+        return { success: true, requires_verification: true, user: newUser };
+      }
 
       // Store tokens
       localStorage.setItem('access_token', tokens.access);
@@ -204,7 +219,7 @@ export const AuthProvider = ({ children }) => {
 
   const convertGuest = async (data) => {
     try {
-      const response = await authApi.convertGuest(data);
+      const response = await authApi.convertGuest(sanitizeFormData(data));
       const { user: userData, tokens } = response.data;
 
       localStorage.setItem('access_token', tokens.access);
@@ -249,7 +264,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const response = await authApi.updateProfile(profileData);
+      const response = await authApi.updateProfile(sanitizeFormData(profileData));
       setUser(response.data);
       return { success: true, user: response.data };
     } catch (error) {

@@ -1,5 +1,63 @@
+import os
 from django.core.mail import send_mail
 from django.conf import settings
+
+
+def get_frontend_url():
+    """Get the frontend URL from environment or settings."""
+    return os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+
+
+def send_verification_email(user):
+    """Send an email verification link to a newly registered user."""
+    frontend_url = get_frontend_url()
+    verify_url = f"{frontend_url}/verify-email?token={user.email_verification_token}"
+    subject = "Verify Your Email — OpenCanvas"
+    html_message = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #4F46E5, #7C3AED); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">Verify Your Email</h1>
+        </div>
+        <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
+            <p style="font-size: 16px; color: #374151;">Hi {user.first_name or user.username},</p>
+            <p style="font-size: 14px; color: #6B7280;">
+                Thanks for signing up for OpenCanvas! Please verify your email address by clicking the button below.
+            </p>
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{verify_url}" style="display: inline-block; background: #4F46E5; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 15px;">
+                    Verify Email Address
+                </a>
+            </div>
+            <p style="font-size: 13px; color: #6B7280;">
+                If you didn't create an account on OpenCanvas, you can safely ignore this email.
+            </p>
+            <p style="font-size: 12px; color: #9CA3AF;">
+                Or copy this link into your browser:<br />
+                <a href="{verify_url}" style="color: #4F46E5; word-break: break-all;">{verify_url}</a>
+            </p>
+            <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 25px 0;" />
+            <p style="font-size: 12px; color: #9CA3AF; text-align: center;">
+                This is an automated message from OpenCanvas. Do not reply to this email.
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+    plain_message = (
+        f"Hi {user.first_name or user.username},\n\n"
+        f"Thanks for signing up! Please verify your email:\n{verify_url}\n\n"
+        f"If you didn't create this account, ignore this email.\n"
+    )
+
+    send_mail(
+        subject=subject,
+        message=plain_message,
+        html_message=html_message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=True,
+    )
 
 
 def send_welcome_email(user, password, course=None):
@@ -24,7 +82,7 @@ def send_welcome_email(user, password, course=None):
             <p style="font-size: 14px; color: #6B7280;">
                 Please log in and change your password as soon as possible.
             </p>
-            <a href="http://localhost:3000/login" style="display: inline-block; background: #4F46E5; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-top: 10px;">
+            <a href="{get_frontend_url()}/login" style="display: inline-block; background: #4F46E5; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-top: 10px;">
                 Log In Now
             </a>
             <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 25px 0;" />
@@ -41,7 +99,7 @@ def send_welcome_email(user, password, course=None):
         f"Your account has been created{course_info}.\n\n"
         f"Username: {user.username}\n"
         f"Password: {password}\n\n"
-        f"Please log in at http://localhost:3000/login and change your password.\n"
+        f"Please log in at {get_frontend_url()}/login and change your password.\n"
     )
 
     send_mail(
@@ -56,7 +114,7 @@ def send_welcome_email(user, password, course=None):
 
 def send_password_reset_email(user, uid, token):
     """Email a password reset link to the user."""
-    reset_url = f"http://localhost:3000/forgot-password?uid={uid}&token={token}"
+    reset_url = f"{get_frontend_url()}/forgot-password?uid={uid}&token={token}"
     subject = "Reset Your Password — OpenCanvas"
     html_message = f"""
     <html>
@@ -108,7 +166,7 @@ def send_password_reset_email(user, uid, token):
 
 def send_board_shared_email(shared_with, board, shared_by):
     """Notify a user that a board was shared with them."""
-    board_url = f"http://localhost:3000/workspace?board={board.id}"
+    board_url = f"{get_frontend_url()}/workspace?board={board.id}"
     sharer_name = shared_by.first_name or shared_by.username
     subject = f"{sharer_name} shared a board with you — OpenCanvas"
     html_message = f"""
@@ -153,7 +211,7 @@ def send_board_shared_email(shared_with, board, shared_by):
 
 def send_course_enrolled_email(user, course):
     """Notify a user they have been enrolled in a course."""
-    courses_url = "http://localhost:3000/courses"
+    courses_url = f"{get_frontend_url()}/courses"
     subject = f"Enrollment Confirmed: {course.code} — OpenCanvas"
     html_message = f"""
     <html>
@@ -213,7 +271,7 @@ def send_password_reset_confirmation_email(user):
             <p style="font-size: 14px; color: #6B7280;">
                 Your OpenCanvas password has been successfully reset. You can now log in with your new password.
             </p>
-            <a href="http://localhost:3000/login" style="display: inline-block; background: #4F46E5; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-top: 10px;">
+            <a href="{get_frontend_url()}/login" style="display: inline-block; background: #4F46E5; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-top: 10px;">
                 Log In Now
             </a>
             <p style="font-size: 13px; color: #6B7280; margin-top: 20px;">
@@ -230,7 +288,7 @@ def send_password_reset_confirmation_email(user):
     plain_message = (
         f"Hi {user.first_name or user.username},\n\n"
         f"Your OpenCanvas password has been successfully reset.\n\n"
-        f"Log in at: http://localhost:3000/login\n\n"
+        f"Log in at: {get_frontend_url()}/login\n\n"
         f"If you did not make this change, please contact support immediately.\n"
     )
 

@@ -1,64 +1,38 @@
 import React, { useState } from 'react';
-import { Palette, Mail, Lock, Eye, EyeOff, User, ArrowRight } from 'lucide-react';
+import { Palette, Lock, Eye, EyeOff, User, ArrowRight, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { authApi } from '../services/api';
 
 function LoginPage({ onNavigate }) {
-  const { login, register, loginAsGuest } = useAuth();
-  const [isLogin, setIsLogin] = useState(true);
+  const { login, loginAsGuest } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const allowPublicRegistration = true;
+  const [verificationNeeded, setVerificationNeeded] = useState(null); // email string if needs verification
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setVerificationNeeded(null);
     setLoading(true);
 
     try {
-      if (isLogin) {
-        const result = await login(username, password);
-        if (result.success) {
-          const role = result.user?.role;
-          if (role === 'admin') {
-            onNavigate('admin');
-          } else if (role === 'lecturer') {
-            onNavigate('lecturer');
-          } else {
-            onNavigate('dashboard');
-          }
+      const result = await login(username, password);
+      if (result.success) {
+        const role = result.user?.role;
+        if (role === 'admin') {
+          onNavigate('admin');
+        } else if (role === 'lecturer') {
+          onNavigate('lecturer');
         } else {
-          setError(result.error || 'Login failed. Please check your credentials.');
-        }
-      } else {
-        if (password !== confirmPassword) {
-          setError('Passwords do not match.');
-          setLoading(false);
-          return;
-        }
-        const result = await register({
-          username,
-          email,
-          password,
-          password2: password,
-          first_name: firstName,
-          last_name: lastName,
-        });
-        if (result.success) {
           onNavigate('dashboard');
-        } else {
-          const errors = result.errors;
-          const message = errors?.username?.[0] || errors?.email?.[0] || errors?.password?.[0] || errors?.non_field_errors?.[0] || 'Registration failed.';
-          setError(message);
         }
+      } else if (result.requires_verification) {
+        setVerificationNeeded(result.email);
+      } else {
+        setError(result.error || 'Login failed. Please check your credentials.');
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
@@ -84,6 +58,17 @@ function LoginPage({ onNavigate }) {
     }
   };
 
+  const handleResendVerification = async () => {
+    if (!verificationNeeded) return;
+    try {
+      await authApi.resendVerification(verificationNeeded);
+      setError('');
+      alert('Verification email sent! Check your inbox.');
+    } catch {
+      setError('Failed to resend verification email.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
@@ -93,10 +78,27 @@ function LoginPage({ onNavigate }) {
             <Palette className="h-10 w-10 text-indigo-600" />
             <span className="text-3xl font-bold text-gray-900">OpenCanvas</span>
           </div>
-          <p className="text-gray-600 mt-2">
-            {isLogin ? 'Welcome back!' : 'Create your account'}
-          </p>
+          <p className="text-gray-600 mt-2">Welcome back!</p>
         </div>
+
+        {/* Verification needed banner */}
+        {verificationNeeded && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
+            <div className="flex items-start space-x-2">
+              <Mail className="w-5 h-5 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium">Email not verified</p>
+                <p className="mt-1 text-amber-700">Please check your email ({verificationNeeded}) and click the verification link.</p>
+                <button
+                  onClick={handleResendVerification}
+                  className="mt-2 text-indigo-600 hover:underline font-medium text-xs"
+                >
+                  Resend verification email
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error Message */}
         {error && (
@@ -122,50 +124,6 @@ function LoginPage({ onNavigate }) {
             </div>
           </div>
 
-          {!isLogin && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                  <input
-                    type="text"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="John"
-                    required={!isLogin}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                  <input
-                    type="text"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="Doe"
-                    required={!isLogin}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="john@example.com"
-                    required={!isLogin}
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <div className="relative">
@@ -188,44 +146,18 @@ function LoginPage({ onNavigate }) {
             </div>
           </div>
 
-          {!isLogin && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Confirm your password"
-                  required={!isLogin}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {isLogin && (
-            <div className="flex justify-end">
-              <button type="button" onClick={() => onNavigate('forgot-password')} className="text-sm text-indigo-600 hover:underline">
-                Forgot password?
-              </button>
-            </div>
-          )}
+          <div className="flex justify-end">
+            <button type="button" onClick={() => onNavigate('forgot-password')} className="text-sm text-indigo-600 hover:underline">
+              Forgot password?
+            </button>
+          </div>
 
           <button
             type="submit"
             disabled={loading}
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Create Account')}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
@@ -249,35 +181,15 @@ function LoginPage({ onNavigate }) {
           Limited features available in guest mode
         </p>
 
-        {/* Toggle Login/Register */}
+        {/* Link to Sign Up */}
         <div className="mt-6 text-center text-sm text-gray-600">
-          {isLogin ? (
-            allowPublicRegistration ? (
-              <>
-                Don't have an account?{' '}
-                <button
-                  onClick={() => { setIsLogin(false); setError(''); }}
-                  className="text-indigo-600 font-semibold hover:underline"
-                >
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <span className="text-gray-500">
-                Account creation is managed by your administrator
-              </span>
-            )
-          ) : (
-            <>
-              Already have an account?{' '}
-              <button
-                onClick={() => { setIsLogin(true); setError(''); }}
-                className="text-indigo-600 font-semibold hover:underline"
-              >
-                Sign in
-              </button>
-            </>
-          )}
+          Don't have an account?{' '}
+          <button
+            onClick={() => onNavigate('signup')}
+            className="text-indigo-600 font-semibold hover:underline"
+          >
+            Sign up
+          </button>
         </div>
       </div>
     </div>

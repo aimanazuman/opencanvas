@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, User, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { sanitizeText } from '../utils/sanitize';
 
 const GuestRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
   const { convertGuest } = useAuth();
@@ -26,7 +27,7 @@ const GuestRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
 
     setLoading(true);
     try {
-      const result = await convertGuest({ username, email, password, password2 });
+      const result = await convertGuest({ username: sanitizeText(username), email, password, password2 });
       if (result.success) {
         if (onSuccess) onSuccess();
         onClose();

@@ -1,3 +1,4 @@
+import re
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.password_validation import validate_password
@@ -6,6 +7,19 @@ from rest_framework.validators import UniqueValidator
 from .models import Notification, SystemSettings
 
 User = get_user_model()
+
+
+def sanitize_text(value):
+    """Strip HTML tags and dangerous content from text input to prevent XSS."""
+    if not value or not isinstance(value, str):
+        return value
+    # Remove HTML tags
+    value = re.sub(r'<[^>]+>', '', value)
+    # Remove javascript: protocol
+    value = re.sub(r'javascript\s*:', '', value, flags=re.IGNORECASE)
+    # Remove event handlers like onclick=, onload=, etc.
+    value = re.sub(r'\bon\w+\s*=', '', value, flags=re.IGNORECASE)
+    return value.strip()
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -20,12 +34,12 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'role', 'is_guest', 'avatar', 'bio', 'institution', 'institution_name',
+            'role', 'is_guest', 'guest_expires_at', 'email_verified', 'avatar', 'bio', 'institution', 'institution_name',
             'storage_used', 'storage_quota', 'storage_used_mb', 'storage_quota_mb',
             'preferences', 'date_joined', 'last_login',
             'username_change_info', 'email_change_info',
         ]
-        read_only_fields = ['id', 'date_joined', 'last_login', 'storage_used', 'is_guest']
+        read_only_fields = ['id', 'date_joined', 'last_login', 'storage_used', 'is_guest', 'guest_expires_at', 'email_verified']
 
     def get_storage_used_mb(self, obj):
         return round(obj.storage_used / (1024 * 1024), 2)
@@ -66,6 +80,11 @@ class UserSerializer(serializers.ModelSerializer):
         }
 
     def update(self, instance, validated_data):
+        # Sanitize text fields to prevent XSS
+        for field in ['first_name', 'last_name', 'bio']:
+            if field in validated_data and validated_data[field]:
+                validated_data[field] = sanitize_text(validated_data[field])
+
         settings = SystemSettings.get_all_settings()
 
         # Check username change restrictions
@@ -124,7 +143,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'role', 'is_guest', 'is_active', 'avatar', 'bio',
+            'role', 'is_guest', 'guest_expires_at', 'is_active', 'avatar', 'bio',
             'storage_used', 'storage_quota', 'storage_used_mb', 'storage_quota_mb',
             'boards_count', 'date_joined', 'last_login', 'password',
         ]
@@ -179,12 +198,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         if attrs['password'] != attrs['password2']:
             raise serializers.ValidationError({"password": "Password fields didn't match."})
 
-        # Validate email domain if institutional email is required
-        # This can be customized based on requirements
-        email = attrs.get('email', '')
-        if email:
-            domain = email.split('@')[-1]
-            # You can add institution domain validation here
+        # Sanitize text fields to prevent XSS
+        for field in ['username', 'first_name', 'last_name']:
+            if attrs.get(field):
+                attrs[field] = sanitize_text(attrs[field])
 
         return attrs
 
@@ -286,4 +303,6 @@ class ConvertGuestSerializer(serializers.Serializer):
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
             raise serializers.ValidationError({"password": "Password fields didn't match."})
+        if attrs.get('username'):
+            attrs['username'] = sanitize_text(attrs['username'])
         return attrs

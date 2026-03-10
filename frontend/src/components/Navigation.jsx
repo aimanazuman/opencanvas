@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Layout, User, ChevronDown, Settings, LogOut, UserPlus, Shield } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import NotificationDropdown from './NotificationDropdown';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -7,6 +8,23 @@ const Navigation = ({ onNavigate }) => {
   const { user, logout, isGuest } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const location = useLocation();
+
+  // Check if a nav link is the current route
+  const isActive = (page) => {
+    const routeMap = {
+      dashboard: '/dashboard',
+      archive: '/archive',
+      shared: '/shared',
+      courses: '/courses',
+      templates: '/templates',
+      lecturer: '/lecturer',
+      admin: '/admin',
+    };
+    const route = routeMap[page];
+    if (!route) return false;
+    return location.pathname === route || location.pathname.startsWith(route + '/');
+  };
 
   const displayName = isGuest
     ? 'Guest'
@@ -30,57 +48,35 @@ const Navigation = ({ onNavigate }) => {
           </button>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-6">
-            <button
-              onClick={() => onNavigate('dashboard')}
-              className="hover:text-blue-200 transition"
-            >
-              Dashboard
-            </button>
-            {!isGuest && (
+          <div className="hidden md:flex items-center space-x-1">
+            {[
+              { page: 'dashboard', label: 'Dashboard', show: true },
+              { page: 'archive', label: 'Archive', show: !isGuest },
+              { page: 'shared', label: 'Shared', show: !isGuest },
+              { page: 'courses', label: 'Courses', show: !isGuest && userRole === 'student' },
+              { page: 'templates', label: 'Templates', show: true },
+              { page: 'lecturer', label: 'Lecturer', show: userRole === 'lecturer' || userRole === 'admin' },
+            ].filter(l => l.show).map(link => (
               <button
-                onClick={() => onNavigate('archive')}
-                className="hover:text-blue-200 transition"
+                key={link.page}
+                onClick={() => onNavigate(link.page)}
+                className={`relative px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                  isActive(link.page)
+                    ? 'text-white bg-white/15 nav-link-active'
+                    : 'text-blue-100 hover:text-white hover:bg-white/10'
+                }`}
               >
-                Archive
+                {link.label}
               </button>
-            )}
-            {!isGuest && (
-              <button
-                onClick={() => onNavigate('shared')}
-                className="hover:text-blue-200 transition"
-              >
-                Shared
-              </button>
-            )}
-            {!isGuest && userRole === 'student' && (
-              <button
-                onClick={() => onNavigate('courses')}
-                className="hover:text-blue-200 transition"
-              >
-                Courses
-              </button>
-            )}
-            <button
-              onClick={() => onNavigate('templates')}
-              className="hover:text-blue-200 transition"
-            >
-              Templates
-            </button>
-
-            {/* Role-based navigation */}
-            {(userRole === 'lecturer' || userRole === 'admin') && (
-              <button
-                onClick={() => onNavigate('lecturer')}
-                className="hover:text-blue-200 transition"
-              >
-                Lecturer
-              </button>
-            )}
+            ))}
             {userRole === 'admin' && (
               <button
                 onClick={() => onNavigate('admin')}
-                className="hover:text-blue-200 transition flex items-center space-x-1"
+                className={`relative px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 flex items-center space-x-1 ${
+                  isActive('admin')
+                    ? 'text-white bg-white/15 nav-link-active'
+                    : 'text-blue-100 hover:text-white hover:bg-white/10'
+                }`}
               >
                 <Shield className="w-4 h-4" />
                 <span>Admin</span>
@@ -88,7 +84,11 @@ const Navigation = ({ onNavigate }) => {
             )}
 
             {/* Notifications */}
-            {!isGuest && <NotificationDropdown onNavigate={onNavigate} />}
+            {!isGuest && (
+              <div className="flex items-center">
+                <NotificationDropdown onNavigate={onNavigate} />
+              </div>
+            )}
 
             {/* User Menu */}
             <div className="relative">
@@ -172,7 +172,7 @@ const Navigation = ({ onNavigate }) => {
 
         {/* Mobile Menu */}
         {showMobileMenu && (
-          <div className="md:hidden py-4 border-t border-blue-500">
+          <div className="md:hidden py-4 border-t border-blue-500 animate-mobileMenu">
             <div className="flex flex-col space-y-3">
               <button onClick={() => { onNavigate('dashboard'); setShowMobileMenu(false); }} className="text-left hover:text-blue-200">
                 Dashboard

@@ -129,6 +129,61 @@ class CourseViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Invalid invite code'}, status=status.HTTP_404_NOT_FOUND)
         return Response(CourseSerializer(course, context={'request': request}).data)
 
+    @action(detail=True, methods=['post'], url_path='bulk-enroll')
+    def bulk_enroll(self, request, pk=None):
+        """Bulk enroll multiple students in a course (instructor/admin only)"""
+        course = self.get_object()
+        if course.instructor != request.user and request.user.role != 'admin':
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
+        student_ids = request.data.get('student_ids', [])
+        section = request.data.get('section', '')
+        if not student_ids:
+            return Response({'error': 'No students provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        enrolled = []
+        already_enrolled = []
+        errors = []
+
+        for sid in student_ids:
+            try:
+                student = User.objects.get(id=sid)
+                enrollment, created = Enrollment.objects.get_or_create(
+                    student=student,
+                    course=course,
+                    defaults={'status': 'active', 'section': section}
+                )
+                if created:
+                    enrolled.append(sid)
+                    notify_course_enrolled(enrollment)
+                    try:
+                        send_course_enrolled_email(student, course)
+                    except Exception:
+                        pass
+                elif enrollment.status != 'active':
+                    enrollment.status = 'active'
+                    if section:
+                        enrollment.section = section
+                    enrollment.save()
+                    enrolled.append(sid)
+                else:
+                    already_enrolled.append(sid)
+            except User.DoesNotExist:
+                errors.append(sid)
+
+        log_action(request.user, 'create', 'enrollment', course.id,
+                   {'course': course.name, 'method': 'bulk_enroll', 'count': len(enrolled)}, request)
+
+        return Response({
+            'enrolled': len(enrolled),
+            'already_enrolled': len(already_enrolled),
+            'errors': len(errors),
+            'message': f'{len(enrolled)} student(s) enrolled successfully'
+        })
+
     @action(detail=True, methods=['get'])
     def analytics(self, request, pk=None):
         """Get analytics for a course (instructor/admin only)"""

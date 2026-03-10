@@ -16,10 +16,13 @@ from .permissions import IsAdminUser, IsLecturerOrAdmin
 from .models import AuditLog, SystemSettings, Notification
 from .audit import log_action
 from .bulk_import import parse_csv, parse_xlsx, validate_rows, process_bulk_import
-from .emails import send_password_reset_email, send_password_reset_confirmation_email
+from .emails import send_password_reset_email, send_password_reset_confirmation_email, send_verification_email
 from django.db.models import Q
+from django.utils import timezone
+from datetime import timedelta
 from uuid import uuid4
 import json
+import re
 
 User = get_user_model()
 
@@ -41,23 +44,44 @@ class RegisterView(generics.CreateAPIView):
         try:
             default_gb = float(SystemSettings.get_all_settings().get('defaultStorageQuota', '5'))
             user.storage_quota = int(default_gb * (1024 ** 3))
-            user.save(update_fields=['storage_quota'])
         except (ValueError, TypeError):
             pass
 
-        # Generate JWT tokens for the new user
-        refresh = RefreshToken.for_user(user)
+        # Check if email verification is required
+        all_settings = SystemSettings.get_all_settings()
+        require_verification = all_settings.get('requireEmailVerification', 'true').lower() == 'true'
 
-        log_action(user, 'create', 'user', user.id, {'username': user.username}, request)
+        if require_verification:
+            user.email_verification_token = uuid4().hex
+            user.email_verified = False
+            user.save(update_fields=['storage_quota', 'email_verification_token', 'email_verified'])
+            send_verification_email(user)
 
-        return Response({
-            'user': UserSerializer(user).data,
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            },
-            'message': 'User registered successfully'
-        }, status=status.HTTP_201_CREATED)
+            log_action(user, 'create', 'user', user.id, {'username': user.username}, request)
+
+            # Return user data but no tokens — user must verify first
+            return Response({
+                'user': UserSerializer(user).data,
+                'requires_verification': True,
+                'message': 'Account created. Please check your email to verify your account.'
+            }, status=status.HTTP_201_CREATED)
+        else:
+            user.email_verified = True
+            user.save(update_fields=['storage_quota', 'email_verified'])
+
+            # Generate JWT tokens for the new user
+            refresh = RefreshToken.for_user(user)
+
+            log_action(user, 'create', 'user', user.id, {'username': user.username}, request)
+
+            return Response({
+                'user': UserSerializer(user).data,
+                'tokens': {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                },
+                'message': 'User registered successfully'
+            }, status=status.HTTP_201_CREATED)
 
 
 class LoginView(APIView):
@@ -71,6 +95,17 @@ class LoginView(APIView):
         serializer.is_valid(raise_exception=True)
 
         user = serializer.validated_data['user']
+
+        # Check if email verification is required and user hasn't verified
+        all_settings = SystemSettings.get_all_settings()
+        require_verification = all_settings.get('requireEmailVerification', 'true').lower() == 'true'
+
+        if require_verification and not user.email_verified and not user.is_guest:
+            return Response({
+                'requires_verification': True,
+                'email': user.email,
+                'message': 'Please verify your email address before logging in.'
+            }, status=status.HTTP_403_FORBIDDEN)
 
         # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
@@ -208,7 +243,9 @@ class UserListView(generics.ListAPIView):
         queryset = User.objects.all().order_by('-date_joined')
         role = self.request.query_params.get('role')
         search = self.request.query_params.get('search')
-        if role and role != 'all':
+        if role == 'guest':
+            queryset = queryset.filter(is_guest=True)
+        elif role and role != 'all':
             queryset = queryset.filter(role=role.lower())
         if search:
             queryset = queryset.filter(
@@ -417,6 +454,15 @@ class GuestLoginView(APIView):
         username = f"guest_{uuid4().hex[:8]}"
         user = User(username=username, is_guest=True, role='student')
         user.set_unusable_password()
+        user.guest_expires_at = timezone.now() + timedelta(days=30)
+
+        # Apply default storage quota from system settings
+        try:
+            default_gb = float(SystemSettings.get_all_settings().get('defaultStorageQuota', '5'))
+            user.storage_quota = int(default_gb * (1024 ** 3))
+        except (ValueError, TypeError):
+            pass
+
         user.save()
 
         refresh = RefreshToken.for_user(user)
@@ -453,6 +499,7 @@ class ConvertGuestView(APIView):
         user.email = serializer.validated_data['email']
         user.set_password(serializer.validated_data['password'])
         user.is_guest = False
+        user.guest_expires_at = None
         user.save()
 
         # Generate new tokens for the converted account
@@ -466,6 +513,65 @@ class ConvertGuestView(APIView):
             },
             'message': 'Account converted successfully'
         }, status=status.HTTP_200_OK)
+
+
+class VerifyEmailView(APIView):
+    """Verify a user's email address using the token sent to their email."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token = request.data.get('token', '').strip()
+        if not token:
+            return Response({'error': 'Verification token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email_verification_token=token)
+        except User.DoesNotExist:
+            return Response({'error': 'Invalid or expired verification link.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.email_verified = True
+        user.email_verification_token = None
+        user.save(update_fields=['email_verified', 'email_verification_token'])
+
+        # Generate JWT tokens so user is logged in after verification
+        refresh = RefreshToken.for_user(user)
+
+        log_action(user, 'update', 'user', user.id, {'action': 'email_verified'}, request)
+
+        return Response({
+            'user': UserSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            },
+            'message': 'Email verified successfully.'
+        })
+
+
+class ResendVerificationView(APIView):
+    """Resend the verification email."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip()
+        if not email:
+            return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Don't reveal whether email exists
+            return Response({'message': 'If an account exists with this email, a verification link has been sent.'})
+
+        if user.email_verified:
+            return Response({'message': 'Email is already verified.'})
+
+        # Regenerate token and resend
+        user.email_verification_token = uuid4().hex
+        user.save(update_fields=['email_verification_token'])
+        send_verification_email(user)
+
+        return Response({'message': 'If an account exists with this email, a verification link has been sent.'})
 
 
 class DataExportView(APIView):
@@ -572,6 +678,8 @@ class AdminDashboardStatsView(APIView):
             'admins': User.objects.filter(role='admin').count(),
         }
         active_users = User.objects.filter(is_active=True).count()
+        guest_users = User.objects.filter(is_guest=True).count()
+        expired_guests = User.objects.filter(is_guest=True, guest_expires_at__lte=timezone.now()).count()
         total_boards = Board.objects.filter(is_archived=False).count()
         total_courses = Course.objects.filter(is_active=True).count()
 
@@ -587,6 +695,56 @@ class AdminDashboardStatsView(APIView):
             'storage_used_gb': round(total_storage / (1024 ** 3), 2),
             'storage_quota_gb': round(total_quota / (1024 ** 3), 2),
             'storage_percentage': round((total_storage / total_quota) * 100, 2) if total_quota > 0 else 0,
+            'guest_users': guest_users,
+            'expired_guests': expired_guests,
+        })
+
+
+class GuestAccountsView(APIView):
+    """List guest accounts with expiry info (Admin only)."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from apps.boards.models import Board
+        guests = User.objects.filter(is_guest=True).order_by('guest_expires_at')
+        data = []
+        for g in guests:
+            days_remaining = None
+            if g.guest_expires_at:
+                delta = g.guest_expires_at - timezone.now()
+                days_remaining = max(0, delta.days)
+            boards_count = Board.objects.filter(owner=g).count()
+            data.append({
+                'id': g.id,
+                'username': g.username,
+                'date_joined': g.date_joined.isoformat(),
+                'guest_expires_at': g.guest_expires_at.isoformat() if g.guest_expires_at else None,
+                'days_remaining': days_remaining,
+                'is_expired': days_remaining is not None and days_remaining <= 0,
+                'boards_count': boards_count,
+            })
+        return Response({
+            'total': len(data),
+            'expired': sum(1 for d in data if d['is_expired']),
+            'guests': data,
+        })
+
+
+class GuestCleanupView(APIView):
+    """Delete expired guest accounts and their data (Admin only)."""
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        expired_guests = User.objects.filter(
+            is_guest=True,
+            guest_expires_at__lte=timezone.now()
+        )
+        count = expired_guests.count()
+        expired_guests.delete()
+        log_action(request.user, 'delete', 'guest_cleanup', None, {'deleted_count': count}, request)
+        return Response({
+            'message': f'{count} expired guest account(s) deleted',
+            'deleted_count': count,
         })
 
 

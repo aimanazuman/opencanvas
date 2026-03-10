@@ -104,6 +104,7 @@ export const coursesApi = {
   regenerateInvite: (id) => api.post(`/courses/courses/${id}/regenerate-invite/`),
   joinByCode: (data) => api.post('/courses/courses/join-by-code/', data),
   getInviteInfo: (code) => api.get(`/courses/courses/invite-info/${code}/`),
+  bulkEnroll: (id, data) => api.post(`/courses/courses/${id}/bulk-enroll/`, data),
 };
 
 export const enrollmentsApi = {
@@ -159,6 +160,10 @@ export const adminApi = {
   getStorageStats: () => api.get('/files/storage-stats/'),
   getLargeFiles: () => api.get('/files/large-files/'),
   getUserStorage: (params) => api.get('/files/user-storage/', { params }),
+
+  // Guest Accounts
+  getGuestAccounts: () => api.get('/accounts/guests/'),
+  cleanupGuests: () => api.post('/accounts/guests/cleanup/'),
 };
 
 export const authApi = {
@@ -172,6 +177,8 @@ export const authApi = {
   confirmPasswordReset: (data) => api.post('/accounts/password/reset/confirm/', data),
   guestLogin: () => api.post('/accounts/guest/'),
   convertGuest: (data) => api.post('/accounts/convert-guest/', data),
+  verifyEmail: (token) => api.post('/accounts/verify-email/', { token }),
+  resendVerification: (email) => api.post('/accounts/resend-verification/', { email }),
   exportData: () => api.get('/accounts/export/'),
   deleteAccount: () => api.delete('/accounts/me/'),
 };

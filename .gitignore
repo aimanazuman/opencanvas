@@ -26,9 +26,13 @@ yarn-error.log*
 .pnpm-debug.log*
 build/
 
-# Environment
+# Environment & Secrets
 .env
-.env.local
+.env.*
+!.env.example
+secrets/
+*.key
+*.pem
 
 # IDE
 .vscode/
@@ -42,3 +46,7 @@ Thumbs.db
 
 # Docker
 *.pid
+
+# Misc
+SETUP.md
+nul

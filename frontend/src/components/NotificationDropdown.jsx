@@ -80,7 +80,8 @@ function NotificationDropdown({ onNavigate }) {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setShowDropdown(!showDropdown)}
-        className="hover:text-blue-200 transition relative"
+        className="hover:text-blue-200 transition relative p-1.5 flex items-center justify-center"
+        aria-label="Notifications"
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (

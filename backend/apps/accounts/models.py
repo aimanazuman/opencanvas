@@ -32,6 +32,9 @@ class User(AbstractUser):
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')
     is_guest = models.BooleanField(default=False)
+    guest_expires_at = models.DateTimeField(null=True, blank=True, help_text="When this guest account will be auto-deleted")
+    email_verified = models.BooleanField(default=False, help_text="Whether the user has verified their email address")
+    email_verification_token = models.CharField(max_length=64, blank=True, null=True)
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     bio = models.TextField(blank=True)
     institution = models.ForeignKey(Institution, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
@@ -123,6 +126,7 @@ class Notification(models.Model):
         ('invite_accepted', 'Invite Accepted'),
         ('quota_changed', 'Quota Changed'),
         ('storage_warning', 'Storage Warning'),
+        ('guest_account_expiry', 'Guest Account Expiry'),
     ]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')

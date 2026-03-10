@@ -8,6 +8,12 @@ urlpatterns = [
     path('logout/', views.LogoutView.as_view(), name='logout'),
     path('guest/', views.GuestLoginView.as_view(), name='guest-login'),
     path('convert-guest/', views.ConvertGuestView.as_view(), name='convert-guest'),
+    path('guests/', views.GuestAccountsView.as_view(), name='guest-accounts'),
+    path('guests/cleanup/', views.GuestCleanupView.as_view(), name='guest-cleanup'),
+
+    # Email Verification
+    path('verify-email/', views.VerifyEmailView.as_view(), name='verify-email'),
+    path('resend-verification/', views.ResendVerificationView.as_view(), name='resend-verification'),
 
     # Profile
     path('profile/', views.ProfileView.as_view(), name='profile'),
