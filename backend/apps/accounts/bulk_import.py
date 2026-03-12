@@ -10,6 +10,7 @@ from .models import SystemSettings, Notification
 User = get_user_model()
 
 REQUIRED_COLUMNS = {'email'}
+EXPECTED_COLUMNS = {'email', 'first_name', 'last_name', 'username', 'section'}
 OPTIONAL_COLUMNS = {'first_name', 'last_name', 'username', 'section'}
 
 
@@ -119,6 +120,35 @@ def validate_rows(rows):
     return valid, errors
 
 
+def validate_bulk_import_sections(rows, course):
+    """Validate sections against course sections when a course is selected.
+    Returns (valid_rows, errors)."""
+    if not course:
+        return rows, []
+
+    course_sections = course.sections or []
+    # Normalize section names for comparison
+    valid_section_names = {s.strip().lower() for s in course_sections if isinstance(s, str) and s.strip()}
+
+    errors = []
+    valid = []
+    for row in rows:
+        section = row.get('section', '').strip()
+        row_num = row.get('_row', '?')
+
+        if not section:
+            errors.append({'row': row_num, 'error': f'Section is required when enrolling in a course (email: {row["email"]})'})
+            continue
+
+        if valid_section_names and section.lower() not in valid_section_names:
+            errors.append({'row': row_num, 'error': f'Section "{section}" does not exist in course. Available sections: {", ".join(course_sections)}'})
+            continue
+
+        valid.append(row)
+
+    return valid, errors
+
+
 def process_bulk_import(rows, course_id, send_emails=True, created_by=None):
     """
     Process validated rows: create users, enroll in course, send emails.
@@ -130,6 +160,14 @@ def process_bulk_import(rows, course_id, send_emails=True, created_by=None):
             course = Course.objects.get(id=course_id)
         except Course.DoesNotExist:
             return {'success': False, 'error': f'Course ID {course_id} not found'}
+
+    # Validate sections against course if course is specified
+    if course:
+        rows, section_errors = validate_bulk_import_sections(rows, course)
+        if section_errors and not rows:
+            return {'success': False, 'error': 'All rows failed section validation', 'section_errors': section_errors}
+    else:
+        section_errors = []
 
     # Get default storage quota
     try:
@@ -227,5 +265,9 @@ def process_bulk_import(rows, course_id, send_emails=True, created_by=None):
                 'email': email,
                 'error': str(e),
             })
+
+    # Include section validation errors in the errors list
+    for se in section_errors:
+        results['errors'].append(se)
 
     return results

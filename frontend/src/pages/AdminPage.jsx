@@ -64,6 +64,9 @@ function AdminPage({ onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [storageSearchQuery, setStorageSearchQuery] = useState('');
+  const [showDeleteLogsModal, setShowDeleteLogsModal] = useState(false);
+  const [deletingLogs, setDeletingLogs] = useState(false);
 
   // API data
   const [dashboardStats, setDashboardStats] = useState(null);
@@ -903,24 +906,44 @@ function AdminPage({ onNavigate }) {
 
         {/* User Storage Usage */}
         <div className="bg-white rounded-xl shadow-sm border overflow-hidden mb-8">
-          <div className="p-6 border-b flex items-center justify-between">
+          <div className="p-6 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <h3 className="font-semibold text-gray-900">User Storage Usage</h3>
-            <select
-              value={userStorageSort}
-              onChange={(e) => setUserStorageSort(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="storage_used">Sort by Used</option>
-              <option value="percentage_used">Sort by % Used</option>
-              <option value="file_count">Sort by File Count</option>
-              <option value="display_name">Sort by Name</option>
-            </select>
+            <div className="flex items-center space-x-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search users..."
+                  value={storageSearchQuery}
+                  onChange={(e) => setStorageSearchQuery(e.target.value)}
+                  className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm w-48 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+              <select
+                value={userStorageSort}
+                onChange={(e) => setUserStorageSort(e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="storage_used">Sort by Used</option>
+                <option value="percentage_used">Sort by % Used</option>
+                <option value="file_count">Sort by File Count</option>
+                <option value="display_name">Sort by Name</option>
+              </select>
+            </div>
           </div>
           <div className="p-6 space-y-4 max-h-[500px] overflow-y-auto">
-            {userStorageData.length === 0 ? (
-              <p className="text-gray-400 text-center py-4">No users found</p>
-            ) : (
-              userStorageData.map((u) => {
+            {(() => {
+              const filteredStorageData = storageSearchQuery
+                ? userStorageData.filter(u =>
+                    u.display_name.toLowerCase().includes(storageSearchQuery.toLowerCase()) ||
+                    u.username.toLowerCase().includes(storageSearchQuery.toLowerCase()) ||
+                    (u.email && u.email.toLowerCase().includes(storageSearchQuery.toLowerCase()))
+                  )
+                : userStorageData;
+              return filteredStorageData.length === 0 ? (
+                <p className="text-gray-400 text-center py-4">{storageSearchQuery ? 'No matching users found' : 'No users found'}</p>
+              ) : (
+              filteredStorageData.map((u) => {
                 const pct = u.percentage_used;
                 const barColor = pct >= 90 ? 'bg-red-500' : pct >= 80 ? 'bg-yellow-500' : 'bg-blue-500';
                 return (
@@ -943,7 +966,7 @@ function AdminPage({ onNavigate }) {
                   </div>
                 );
               })
-            )}
+            );})()}
           </div>
         </div>
 
@@ -1365,7 +1388,7 @@ function AdminPage({ onNavigate }) {
             <h1 className="text-3xl font-bold text-gray-900">Logs & Audit</h1>
             <p className="text-gray-600 mt-1">View system activity logs and audit trail</p>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 flex-wrap gap-2">
             <select
               value={logFilter}
               onChange={(e) => setLogFilter(e.target.value)}
@@ -1378,11 +1401,36 @@ function AdminPage({ onNavigate }) {
               <option value="error">Error</option>
             </select>
             <button
-              onClick={loadLogs}
+              onClick={async () => { await loadLogs(); toast.info('Logs refreshed'); }}
               className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center space-x-2"
             >
               <RefreshCw className="w-4 h-4" />
               <span>Refresh</span>
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  const res = await adminApi.exportLogs({ limit: 1000 });
+                  const url = URL.createObjectURL(res.data);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'audit_logs.csv';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast.success('Logs exported');
+                } catch { toast.error('Failed to export logs'); }
+              }}
+              className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center space-x-2"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export</span>
+            </button>
+            <button
+              onClick={() => setShowDeleteLogsModal(true)}
+              className="border border-red-300 text-red-600 px-4 py-2 rounded-lg hover:bg-red-50 flex items-center space-x-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Clear Logs</span>
             </button>
           </div>
         </div>
@@ -1445,6 +1493,45 @@ function AdminPage({ onNavigate }) {
             )}
           </div>
         </div>
+
+        {/* Delete Logs Confirmation Modal */}
+        {showDeleteLogsModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Clear All Logs</h3>
+              </div>
+              <p className="text-gray-600 mb-6">Are you sure you want to delete all audit logs? This action cannot be undone. Consider exporting logs first.</p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowDeleteLogsModal(false)}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    setDeletingLogs(true);
+                    try {
+                      const res = await adminApi.deleteLogs();
+                      toast.success(res.data.message);
+                      setShowDeleteLogsModal(false);
+                      loadLogs();
+                    } catch { toast.error('Failed to delete logs'); }
+                    finally { setDeletingLogs(false); }
+                  }}
+                  disabled={deletingLogs}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium disabled:opacity-50"
+                >
+                  {deletingLogs ? 'Deleting...' : 'Delete All Logs'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </>
     );
   };
@@ -1461,7 +1548,7 @@ function AdminPage({ onNavigate }) {
           </div>
           <div className="flex items-center space-x-3 self-start">
             <button
-              onClick={loadGuestAccounts}
+              onClick={async () => { await loadGuestAccounts(); toast.info('Guest accounts refreshed'); }}
               className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center space-x-2"
             >
               <RefreshCw className="w-4 h-4" />

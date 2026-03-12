@@ -8,6 +8,9 @@ const TYPE_COLORS = {
   course_enrolled: 'bg-purple-500',
   system_announcement: 'bg-gray-500',
   invite_accepted: 'bg-teal-500',
+  file_deleted: 'bg-red-500',
+  quota_changed: 'bg-amber-500',
+  storage_warning: 'bg-orange-500',
 };
 
 function formatTimeAgo(dateString) {

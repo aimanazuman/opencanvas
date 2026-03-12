@@ -2,7 +2,7 @@ from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.utils import timezone
 from .models import Board, BoardShare, StarredBoard, BoardVersion, BoardInviteLink
 from .serializers import BoardSerializer, BoardShareSerializer, BoardVersionSerializer, BoardInviteLinkSerializer
@@ -141,9 +141,21 @@ class BoardViewSet(viewsets.ModelViewSet):
         log_action(self.request.user, 'delete', 'board', instance.id, {'name': instance.name}, self.request)
         size = instance.content_size or 0
         owner = instance.owner
-        instance.delete()
-        if size > 0:
-            update_user_storage(owner, -size)
+
+        # Calculate file storage to free (files will be CASCADE deleted)
+        from apps.files.models import File
+        file_size_total = File.objects.filter(
+            board=instance, is_deleted=False
+        ).aggregate(total=Sum('file_size'))['total'] or 0
+
+        # For archived boards, content/file storage was already freed during archive
+        if instance.is_archived:
+            instance.delete()
+        else:
+            instance.delete()
+            total_freed = size + file_size_total
+            if total_freed > 0:
+                update_user_storage(owner, -total_freed)
 
     @action(detail=False, methods=['get'])
     def starred(self, request):
@@ -188,7 +200,7 @@ class BoardViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def archive(self, request, pk=None):
-        """Archive a board"""
+        """Archive a board — moves to cold storage and returns quota to user"""
         board = self.get_object()
         if board.owner != request.user:
             return Response(
@@ -198,12 +210,26 @@ class BoardViewSet(viewsets.ModelViewSet):
 
         board.is_archived = True
         board.save()
-        log_action(request.user, 'update', 'board', board.id, {'action': 'archive'}, request)
-        return Response({'is_archived': True, 'message': 'Board archived'})
+
+        # Return board content storage to user (cold storage)
+        size = board.content_size or 0
+        if size > 0:
+            update_user_storage(board.owner, -size)
+
+        # Also return storage for files attached to this board
+        from apps.files.models import File
+        file_size_total = File.objects.filter(
+            board=board, is_deleted=False
+        ).aggregate(total=Sum('file_size'))['total'] or 0
+        if file_size_total > 0:
+            update_user_storage(board.owner, -file_size_total)
+
+        log_action(request.user, 'update', 'board', board.id, {'action': 'archive', 'storage_freed': size + file_size_total}, request)
+        return Response({'is_archived': True, 'message': 'Board archived', 'storage_freed': size + file_size_total})
 
     @action(detail=True, methods=['post'])
     def restore(self, request, pk=None):
-        """Restore an archived board"""
+        """Restore an archived board — re-charges storage quota"""
         board = self.get_object()
         if board.owner != request.user:
             return Response(
@@ -211,8 +237,28 @@ class BoardViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
+        # Re-charge board content storage
+        size = board.content_size or 0
+        from apps.files.models import File
+        file_size_total = File.objects.filter(
+            board=board, is_deleted=False
+        ).aggregate(total=Sum('file_size'))['total'] or 0
+        total_restore = size + file_size_total
+
+        if total_restore > 0:
+            ok, remaining = check_quota(board.owner, total_restore)
+            if not ok:
+                return Response(
+                    {'error': 'Not enough storage quota to restore this board. Please free up space first.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         board.is_archived = False
         board.save()
+
+        if total_restore > 0:
+            update_user_storage(board.owner, total_restore)
+
         return Response({'is_archived': False, 'message': 'Board restored'})
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])

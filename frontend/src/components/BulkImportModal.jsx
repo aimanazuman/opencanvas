@@ -94,7 +94,7 @@ export default function BulkImportModal({ courses = [], onClose, onComplete, sho
   };
 
   const handleDownloadTemplate = () => {
-    const csv = 'email,first_name,last_name,username,section\njohn@example.com,John,Doe,,A\njane@example.com,Jane,Smith,,B\n';
+    const csv = 'email,first_name,last_name,username,section\njohn@example.com,John,Doe,john.doe,A\njane@example.com,Jane,Smith,jane.smith,B\n';
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

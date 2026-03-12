@@ -15,6 +15,7 @@ function SignUpPage({ onNavigate }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
+  const [resendStatus, setResendStatus] = useState(''); // '' | 'sending' | 'sent'
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -94,21 +95,29 @@ function SignUpPage({ onNavigate }) {
           </button>
           <p className="text-xs text-gray-400 mt-4">
             Didn't receive the email?{' '}
-            <button
-              onClick={async () => {
-                try {
-                  const { authApi } = await import('../services/api');
-                  await authApi.resendVerification(email);
-                  setError('');
-                  alert('Verification email resent!');
-                } catch {
-                  setError('Failed to resend. Please try again.');
-                }
-              }}
-              className="text-indigo-600 hover:underline font-medium"
-            >
-              Resend
-            </button>
+            {resendStatus === 'sent' ? (
+              <span className="text-green-600 font-medium">Verification email sent!</span>
+            ) : (
+              <button
+                onClick={async () => {
+                  if (resendStatus === 'sending') return;
+                  setResendStatus('sending');
+                  try {
+                    const { authApi } = await import('../services/api');
+                    await authApi.resendVerification(email);
+                    setError('');
+                    setResendStatus('sent');
+                  } catch {
+                    setError('Failed to resend. Please try again.');
+                    setResendStatus('');
+                  }
+                }}
+                disabled={resendStatus === 'sending'}
+                className="text-indigo-600 hover:underline font-medium disabled:opacity-50"
+              >
+                {resendStatus === 'sending' ? 'Sending...' : 'Resend'}
+              </button>
+            )}
           </p>
         </div>
       </div>

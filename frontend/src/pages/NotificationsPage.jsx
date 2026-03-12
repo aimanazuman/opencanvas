@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Bell, Check, Info, Users, BookOpen } from 'lucide-react';
+import { Bell, Check, Info, Users, BookOpen, Trash2, HardDrive, AlertTriangle } from 'lucide-react';
 import Navigation from '../components/Navigation';
 import { notificationsApi } from '../services/api';
 
@@ -8,6 +8,9 @@ const TYPE_CONFIG = {
   course_enrolled: { color: 'purple', border: 'border-l-purple-500', badge: 'bg-purple-100 text-purple-700', icon: BookOpen, label: 'Enrolled' },
   system_announcement: { color: 'gray', border: 'border-l-gray-500', badge: 'bg-gray-100 text-gray-700', icon: Info, label: 'System' },
   invite_accepted: { color: 'teal', border: 'border-l-teal-500', badge: 'bg-teal-100 text-teal-700', icon: Users, label: 'Joined' },
+  file_deleted: { color: 'red', border: 'border-l-red-500', badge: 'bg-red-100 text-red-700', icon: Trash2, label: 'File Removed' },
+  quota_changed: { color: 'amber', border: 'border-l-amber-500', badge: 'bg-amber-100 text-amber-700', icon: HardDrive, label: 'Quota' },
+  storage_warning: { color: 'orange', border: 'border-l-orange-500', badge: 'bg-orange-100 text-orange-700', icon: AlertTriangle, label: 'Storage' },
 };
 
 const DEFAULT_CONFIG = { color: 'gray', border: 'border-l-gray-500', badge: 'bg-gray-100 text-gray-700', icon: Info, label: 'Info' };
@@ -79,9 +82,10 @@ function NotificationsPage({ onNavigate, hideNav = false }) {
   const filterButtons = [
     { key: 'all', label: 'All' },
     { key: 'board_shared', label: 'Shared' },
-    // { key: 'submission_graded', label: 'Graded' },
     { key: 'course_enrolled', label: 'Enrolled' },
     { key: 'invite_accepted', label: 'Joined' },
+    { key: 'file_deleted', label: 'File Removed' },
+    { key: 'storage_warning', label: 'Storage' },
   ];
 
   return (

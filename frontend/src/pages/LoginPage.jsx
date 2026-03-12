@@ -58,14 +58,18 @@ function LoginPage({ onNavigate }) {
     }
   };
 
+  const [resendStatus, setResendStatus] = useState(''); // '' | 'sending' | 'sent'
+
   const handleResendVerification = async () => {
-    if (!verificationNeeded) return;
+    if (!verificationNeeded || resendStatus === 'sending') return;
+    setResendStatus('sending');
     try {
       await authApi.resendVerification(verificationNeeded);
       setError('');
-      alert('Verification email sent! Check your inbox.');
+      setResendStatus('sent');
     } catch {
       setError('Failed to resend verification email.');
+      setResendStatus('');
     }
   };
 
@@ -89,12 +93,17 @@ function LoginPage({ onNavigate }) {
               <div>
                 <p className="font-medium">Email not verified</p>
                 <p className="mt-1 text-amber-700">Please check your email ({verificationNeeded}) and click the verification link.</p>
-                <button
-                  onClick={handleResendVerification}
-                  className="mt-2 text-indigo-600 hover:underline font-medium text-xs"
-                >
-                  Resend verification email
-                </button>
+                {resendStatus === 'sent' ? (
+                  <p className="mt-2 text-green-600 font-medium text-xs">Verification email sent! Check your inbox.</p>
+                ) : (
+                  <button
+                    onClick={handleResendVerification}
+                    disabled={resendStatus === 'sending'}
+                    className="mt-2 text-indigo-600 hover:underline font-medium text-xs disabled:opacity-50"
+                  >
+                    {resendStatus === 'sending' ? 'Sending...' : 'Resend verification email'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

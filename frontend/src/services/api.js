@@ -155,6 +155,8 @@ export const adminApi = {
 
   // Audit Logs
   getLogs: (params) => api.get('/accounts/audit-logs/', { params }),
+  deleteLogs: () => api.delete('/accounts/audit-logs/'),
+  exportLogs: (params) => api.get('/accounts/audit-logs/export/', { params, responseType: 'blob' }),
 
   // Storage
   getStorageStats: () => api.get('/files/storage-stats/'),

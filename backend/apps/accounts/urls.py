@@ -42,6 +42,7 @@ urlpatterns = [
 
     # Admin - Audit Logs
     path('audit-logs/', views.AuditLogListView.as_view(), name='audit-logs'),
+    path('audit-logs/export/', views.AuditLogExportView.as_view(), name='audit-logs-export'),
 
     # Notifications
     path('notifications/', views.NotificationListView.as_view(), name='notification-list'),

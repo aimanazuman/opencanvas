@@ -198,11 +198,38 @@ export const AuthProvider = ({ children }) => {
 
   const loginAsGuest = async () => {
     try {
+      // Check if there's an existing guest account in this browser
+      const existingGuestToken = localStorage.getItem('guest_refresh_token');
+      if (existingGuestToken) {
+        try {
+          // Try to refresh the existing guest session
+          const refreshRes = await import('axios').then(axios =>
+            axios.default.post(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/token/refresh/`, { refresh: existingGuestToken })
+          );
+          const newAccess = refreshRes.data.access;
+          localStorage.setItem('access_token', newAccess);
+          localStorage.setItem('refresh_token', existingGuestToken);
+
+          // Load the existing guest profile
+          const profileRes = await authApi.getProfile();
+          if (profileRes.data.is_guest) {
+            setUser(profileRes.data);
+            setIsAuthenticated(true);
+            return { success: true, user: profileRes.data };
+          }
+        } catch {
+          // Existing guest token expired or invalid, clear it and create new
+          localStorage.removeItem('guest_refresh_token');
+        }
+      }
+
       const response = await authApi.guestLogin();
       const { user: userData, tokens } = response.data;
 
       localStorage.setItem('access_token', tokens.access);
       localStorage.setItem('refresh_token', tokens.refresh);
+      // Store guest refresh token separately so it persists across logouts
+      localStorage.setItem('guest_refresh_token', tokens.refresh);
 
       setUser(userData);
       setIsAuthenticated(true);
@@ -224,6 +251,8 @@ export const AuthProvider = ({ children }) => {
 
       localStorage.setItem('access_token', tokens.access);
       localStorage.setItem('refresh_token', tokens.refresh);
+      // Clear guest tracking since account is now permanent
+      localStorage.removeItem('guest_refresh_token');
 
       setUser(userData);
 

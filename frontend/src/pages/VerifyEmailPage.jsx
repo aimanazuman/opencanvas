@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CheckCircle, XCircle, Loader2, Palette } from 'lucide-react';
 import { authApi } from '../services/api';
@@ -10,6 +10,7 @@ function VerifyEmailPage({ onNavigate }) {
   const [status, setStatus] = useState('verifying'); // verifying | success | error
   const [errorMsg, setErrorMsg] = useState('');
   const { refreshUser } = useAuth();
+  const verifyAttempted = useRef(false);
 
   useEffect(() => {
     if (!token) {
@@ -17,6 +18,10 @@ function VerifyEmailPage({ onNavigate }) {
       setErrorMsg('No verification token provided.');
       return;
     }
+
+    // Prevent double-execution in React StrictMode
+    if (verifyAttempted.current) return;
+    verifyAttempted.current = true;
 
     const verify = async () => {
       try {

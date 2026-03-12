@@ -417,6 +417,26 @@ class AuditLogListView(generics.ListAPIView):
             return f"{user_display} {action}d {resource} '{name}'"
         return f"{user_display} {action}d {resource}" + (f" (ID: {log.resource_id})" if log.resource_id else "")
 
+    def _get_log_type(self, log):
+        if log.action in ['delete', 'unshare']:
+            return 'warning'
+        elif log.action in ['create', 'share']:
+            return 'success'
+        return 'info'
+
+    def _serialize_log(self, log):
+        return {
+            'id': log.id,
+            'type': self._get_log_type(log),
+            'action': log.action,
+            'message': self._format_audit_message(log),
+            'user': f"{log.user.first_name} {log.user.last_name}" if log.user else None,
+            'user_id': log.user_id,
+            'details': log.details,
+            'time': log.created_at.isoformat(),
+            'ip_address': log.ip_address,
+        }
+
     def get(self, request):
         queryset = AuditLog.objects.select_related('user').order_by('-created_at')
 
@@ -429,28 +449,51 @@ class AuditLogListView(generics.ListAPIView):
         limit = int(request.query_params.get('limit', 50))
         queryset = queryset[:limit]
 
-        data = []
-        for log in queryset:
-            log_type = 'info'
-            if log.action in ['delete', 'unshare']:
-                log_type = 'warning'
-            elif log.action in ['create', 'share']:
-                log_type = 'success'
-            elif log.action == 'login':
-                log_type = 'info'
-
-            data.append({
-                'id': log.id,
-                'type': log_type,
-                'action': log.action,
-                'message': self._format_audit_message(log),
-                'user': f"{log.user.first_name} {log.user.last_name}" if log.user else None,
-                'user_id': log.user_id,
-                'details': log.details,
-                'time': log.created_at.isoformat(),
-                'ip_address': log.ip_address,
-            })
+        data = [self._serialize_log(log) for log in queryset]
         return Response(data)
+
+    def delete(self, request):
+        """Delete all audit logs (Admin only)."""
+        count = AuditLog.objects.count()
+        AuditLog.objects.all().delete()
+        # Log the deletion itself
+        log_action(request.user, 'delete', 'audit_logs', None, {'deleted_count': count}, request)
+        return Response({'message': f'{count} audit log(s) deleted', 'deleted_count': count})
+
+
+class AuditLogExportView(APIView):
+    """Export audit logs as CSV (Admin only)."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        import csv as csv_module
+        from django.http import HttpResponse
+
+        queryset = AuditLog.objects.select_related('user').order_by('-created_at')
+
+        limit = int(request.query_params.get('limit', 1000))
+        queryset = queryset[:limit]
+
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="audit_logs.csv"'
+
+        writer = csv_module.writer(response)
+        writer.writerow(['ID', 'Action', 'Resource Type', 'Resource ID', 'User', 'IP Address', 'Details', 'Timestamp'])
+
+        for log in queryset:
+            user_display = f"{log.user.first_name} {log.user.last_name}".strip() if log.user else 'Unknown'
+            writer.writerow([
+                log.id,
+                log.action,
+                log.resource_type,
+                log.resource_id or '',
+                user_display,
+                log.ip_address or '',
+                json.dumps(log.details) if log.details else '',
+                log.created_at.isoformat(),
+            ])
+
+        return response
 
 
 class GuestLoginView(APIView):
@@ -809,7 +852,10 @@ class BulkStudentImportView(APIView):
         )
 
         if isinstance(results, dict) and results.get('success') is False:
-            return Response({'error': results['error']}, status=status.HTTP_400_BAD_REQUEST)
+            resp = {'error': results['error']}
+            if results.get('section_errors'):
+                resp['validation_errors'] = results['section_errors']
+            return Response(resp, status=status.HTTP_400_BAD_REQUEST)
 
         # Log the action
         log_action(
