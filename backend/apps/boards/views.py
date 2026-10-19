@@ -1,17 +1,42 @@
+import copy
+import json
+from datetime import timedelta
+
+from django.conf import settings as django_settings
+from django.db import transaction
+from django.db.models import F, Q, Sum
+from django.utils import timezone
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.db.models import Q, Sum
-from django.utils import timezone
-from .models import Board, BoardShare, StarredBoard, BoardVersion, BoardInviteLink
-from .serializers import BoardSerializer, BoardShareSerializer, BoardVersionSerializer, BoardInviteLinkSerializer
-from .permissions import IsBoardOwnerOrShared, IsBoardOwner
-import copy
-from apps.accounts.notifications import notify_board_shared, notify_invite_accepted
-from apps.accounts.emails import send_board_shared_email
+
 from apps.accounts.audit import log_action
-from apps.files.storage import calculate_content_size, update_user_storage, check_quota, check_system_quota
+from apps.accounts.emails import send_board_shared_email
+from apps.accounts.notifications import notify_board_shared, notify_invite_accepted
+from apps.files.storage import calculate_content_size, update_user_storage, charge_storage, QuotaExceeded
+from .access import (
+    LEVEL_RANK, get_board_access, content_for_user,
+)
+from .models import Board, BoardShare, StarredBoard, BoardVersion, BoardInviteLink
+from .permissions import IsBoardOwnerOrShared
+from .serializers import BoardSerializer, BoardShareSerializer, BoardVersionSerializer, BoardInviteLinkSerializer
+
+
+def _int_or_none(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _charge(owner, delta):
+    """charge_storage that speaks DRF: an exceeded quota becomes HTTP 400."""
+    try:
+        charge_storage(owner, delta)
+    except QuotaExceeded as exc:
+        raise ValidationError(exc.message)
 
 
 class BoardViewSet(viewsets.ModelViewSet):
@@ -44,8 +69,10 @@ class BoardViewSet(viewsets.ModelViewSet):
         if self.request.query_params.get('shared'):
             queryset = queryset.filter(shares__user=user).exclude(owner=user)
 
-        if self.request.query_params.get('course'):
-            queryset = queryset.filter(course_id=self.request.query_params.get('course'))
+        course_param = self.request.query_params.get('course')
+        if course_param:
+            course_id = _int_or_none(course_param)
+            queryset = queryset.filter(course_id=course_id) if course_id is not None else queryset.none()
 
         if self.request.query_params.get('is_archived'):
             queryset = queryset.filter(is_archived=self.request.query_params.get('is_archived') == 'true')
@@ -70,7 +97,7 @@ class BoardViewSet(viewsets.ModelViewSet):
             # Exclude boards with a section that doesn't match the student's section
             excluded_ids = []
             for board in queryset.filter(section__gt=''):
-                if board.course_id and board.course_id in section_map:
+                if board.course_id and board.course_id in section_map and board.owner_id != user.id:
                     if section_map[board.course_id] != board.section:
                         excluded_ids.append(board.id)
             if excluded_ids:
@@ -83,44 +110,27 @@ class BoardViewSet(viewsets.ModelViewSet):
         content = serializer.validated_data.get('content', {})
         size = calculate_content_size(content)
 
-        ok, remaining = check_quota(user, size)
-        if not ok:
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError("Storage quota exceeded. Please free up space or contact an administrator.")
-
-        sys_ok, _ = check_system_quota(size)
-        if not sys_ok:
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError("System storage limit reached. Please contact an administrator.")
-
-        instance = serializer.save(owner=user, content_size=size)
-        update_user_storage(user, size)
+        with transaction.atomic():
+            _charge(user, size)
+            instance = serializer.save(owner=user, content_size=size)
         log_action(user, 'create', 'board', instance.id, {'name': instance.name}, self.request)
 
     def perform_update(self, serializer):
         user = self.request.user
-        old_size = serializer.instance.content_size or 0
+        board = serializer.instance
+        owner = board.owner  # the board's size always belongs to its owner, whoever edits it
 
-        if 'content' in serializer.validated_data:
-            new_size = calculate_content_size(serializer.validated_data['content'])
-            delta = new_size - old_size
-
-            if delta > 0:
-                ok, remaining = check_quota(user, delta)
-                if not ok:
-                    from rest_framework.exceptions import ValidationError
-                    raise ValidationError("Storage quota exceeded. Please free up space or contact an administrator.")
-
-                sys_ok, _ = check_system_quota(delta)
-                if not sys_ok:
-                    from rest_framework.exceptions import ValidationError
-                    raise ValidationError("System storage limit reached. Please contact an administrator.")
-
-            instance = serializer.save(content_size=new_size)
-            update_user_storage(user, delta)
-            self.create_version_snapshot(instance)
-        else:
-            instance = serializer.save()
+        with transaction.atomic():
+            if 'content' in serializer.validated_data:
+                new_size = calculate_content_size(serializer.validated_data['content'])
+                delta = new_size - (board.content_size or 0)
+                # Archived boards are not counted in the owner's usage (it was returned when they were archived).
+                if delta != 0 and not board.is_archived:
+                    _charge(owner, delta)
+                instance = serializer.save(content_size=new_size)
+                self.create_version_snapshot(instance)
+            else:
+                instance = serializer.save()
 
         log_action(user, 'update', 'board', instance.id, {'name': instance.name}, self.request)
 
@@ -148,34 +158,40 @@ class BoardViewSet(viewsets.ModelViewSet):
             board=instance, is_deleted=False
         ).aggregate(total=Sum('file_size'))['total'] or 0
 
-        # For archived boards, content/file storage was already freed during archive
-        if instance.is_archived:
-            instance.delete()
-        else:
-            instance.delete()
-            total_freed = size + file_size_total
-            if total_freed > 0:
-                update_user_storage(owner, -total_freed)
+        with transaction.atomic():
+            was_archived = instance.is_archived
+            instance.delete()  # a post_delete signal removes the attached files from disk
+            # For archived boards, content/file storage was already freed during archive
+            if not was_archived:
+                total_freed = size + file_size_total
+                if total_freed > 0:
+                    update_user_storage(owner, -total_freed)
+
+    def _capped(self, queryset):
+        return queryset[:int(django_settings.MAX_LIST_RESULTS)]
 
     @action(detail=False, methods=['get'])
     def starred(self, request):
         """Get all starred boards for current user"""
         boards = self.get_queryset().filter(starred_by=request.user, is_archived=False)
-        serializer = self.get_serializer(boards, many=True)
+        serializer = self.get_serializer(self._capped(boards), many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def archived(self, request):
         """Get all archived boards"""
         boards = self.get_queryset().filter(is_archived=True)
-        serializer = self.get_serializer(boards, many=True)
+        serializer = self.get_serializer(self._capped(boards), many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def templates(self, request):
-        """Get all template boards"""
-        boards = Board.objects.filter(is_template=True)
-        serializer = self.get_serializer(boards, many=True)
+        """Template boards: the ones an administrator published, plus templates the user owns or can already see."""
+        visible_ids = self.get_queryset().values('id')
+        boards = Board.objects.filter(is_template=True, is_archived=False).filter(
+            Q(owner__role='admin') | Q(id__in=visible_ids)
+        ).select_related('owner', 'course').distinct()
+        serializer = self.get_serializer(self._capped(boards), many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
@@ -207,22 +223,25 @@ class BoardViewSet(viewsets.ModelViewSet):
                 {'error': 'Only the owner can archive a board'},
                 status=status.HTTP_403_FORBIDDEN
             )
+        if board.is_archived:
+            return Response({'error': 'This board is already archived'}, status=status.HTTP_400_BAD_REQUEST)
 
-        board.is_archived = True
-        board.save()
-
-        # Return board content storage to user (cold storage)
-        size = board.content_size or 0
-        if size > 0:
-            update_user_storage(board.owner, -size)
-
-        # Also return storage for files attached to this board
         from apps.files.models import File
-        file_size_total = File.objects.filter(
-            board=board, is_deleted=False
-        ).aggregate(total=Sum('file_size'))['total'] or 0
-        if file_size_total > 0:
-            update_user_storage(board.owner, -file_size_total)
+        with transaction.atomic():
+            board.is_archived = True
+            board.save()
+
+            # Return board content storage to user (cold storage)
+            size = board.content_size or 0
+            if size > 0:
+                update_user_storage(board.owner, -size)
+
+            # Also return storage for files attached to this board
+            file_size_total = File.objects.filter(
+                board=board, is_deleted=False
+            ).aggregate(total=Sum('file_size'))['total'] or 0
+            if file_size_total > 0:
+                update_user_storage(board.owner, -file_size_total)
 
         log_action(request.user, 'update', 'board', board.id, {'action': 'archive', 'storage_freed': size + file_size_total}, request)
         return Response({'is_archived': True, 'message': 'Board archived', 'storage_freed': size + file_size_total})
@@ -236,6 +255,8 @@ class BoardViewSet(viewsets.ModelViewSet):
                 {'error': 'Only the owner can restore a board'},
                 status=status.HTTP_403_FORBIDDEN
             )
+        if not board.is_archived:
+            return Response({'error': 'This board is not archived'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Re-charge board content storage
         size = board.content_size or 0
@@ -245,19 +266,17 @@ class BoardViewSet(viewsets.ModelViewSet):
         ).aggregate(total=Sum('file_size'))['total'] or 0
         total_restore = size + file_size_total
 
-        if total_restore > 0:
-            ok, remaining = check_quota(board.owner, total_restore)
-            if not ok:
-                return Response(
-                    {'error': 'Not enough storage quota to restore this board. Please free up space first.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        board.is_archived = False
-        board.save()
-
-        if total_restore > 0:
-            update_user_storage(board.owner, total_restore)
+        try:
+            with transaction.atomic():
+                if total_restore > 0:
+                    charge_storage(board.owner, total_restore)
+                board.is_archived = False
+                board.save()
+        except QuotaExceeded:
+            return Response(
+                {'error': 'Not enough storage quota to restore this board. Please free up space first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         return Response({'is_archived': False, 'message': 'Board restored'})
 
@@ -283,30 +302,33 @@ class BoardViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def duplicate(self, request, pk=None):
-        """Create a duplicate of a board"""
+        """Create a private copy of a board for the current user"""
         original_board = self.get_object()
         user = request.user
-        content = copy.deepcopy(original_board.content)
+        level = get_board_access(user, original_board)
+        # Copy only what this user may see (other students' quiz answers are not copied).
+        content = copy.deepcopy(content_for_user(original_board, user, level))
         size = calculate_content_size(content)
 
-        ok, remaining = check_quota(user, size)
-        if not ok:
-            return Response(
-                {'error': 'Storage quota exceeded. Please free up space or contact an administrator.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # The copy belongs to the course only when the person copying teaches it; otherwise it is a personal board.
+        course = original_board.course if (level in ('owner', 'instructor') or user.role == 'admin') else None
 
-        new_board = Board.objects.create(
-            name=f"{original_board.name} (Copy)",
-            description=original_board.description,
-            owner=user,
-            course=original_board.course,
-            content=content,
-            content_size=size,
-            is_template=False,
-            is_archived=False
-        )
-        update_user_storage(user, size)
+        try:
+            with transaction.atomic():
+                charge_storage(user, size)
+                new_board = Board.objects.create(
+                    name=f"{original_board.name} (Copy)"[:255],
+                    description=original_board.description,
+                    owner=user,
+                    course=course,
+                    board_type=original_board.board_type,
+                    content=content,
+                    content_size=size,
+                    is_template=False,
+                    is_archived=False
+                )
+        except QuotaExceeded as exc:
+            return Response({'error': exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = self.get_serializer(new_board)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -315,8 +337,8 @@ class BoardViewSet(viewsets.ModelViewSet):
     def versions(self, request, pk=None):
         """Get all versions of a board"""
         board = self.get_object()
-        versions = board.versions.all()
-        serializer = BoardVersionSerializer(versions, many=True)
+        versions = board.versions.all()[:100]
+        serializer = BoardVersionSerializer(versions, many=True, context={'request': request})
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
@@ -333,7 +355,7 @@ class BoardViewSet(viewsets.ModelViewSet):
 
         try:
             version = board.versions.get(id=version_id)
-        except BoardVersion.DoesNotExist:
+        except (BoardVersion.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': 'Version not found'},
                 status=status.HTTP_404_NOT_FOUND
@@ -347,16 +369,15 @@ class BoardViewSet(viewsets.ModelViewSet):
         new_size = calculate_content_size(version.content)
         delta = new_size - old_size
 
-        board.content = version.content
-        board.content_size = new_size
-        board.save()
-
-        if delta != 0:
-            update_user_storage(board.owner, delta)
+        with transaction.atomic():
+            if delta != 0 and not board.is_archived:
+                _charge(board.owner, delta)
+            board.content = version.content
+            board.content_size = new_size
+            board.save()
 
         serializer = self.get_serializer(board)
         return Response(serializer.data)
-
 
     @action(detail=True, methods=['post'], url_path='submit-quiz-response',
             permission_classes=[permissions.IsAuthenticated])
@@ -367,69 +388,64 @@ class BoardViewSet(viewsets.ModelViewSet):
         Merges the response into board.content.responses server-side to avoid overwriting
         other students' responses.
         """
-        # Fetch board directly — don't use get_object() because IsBoardOwnerOrShared
-        # blocks POST for view-only users, but quiz submission must be allowed for anyone
-        # who can access the board.
-        try:
-            board = Board.objects.get(pk=pk)
-        except Board.DoesNotExist:
+        # The board is fetched directly instead of with get_object(): IsBoardOwnerOrShared blocks POST for view-only
+        # users, but a quiz submission must be allowed for anyone who can access the board.
+        user = request.user
+        pk_int = _int_or_none(pk)
+        if pk_int is None:
             return Response({'error': 'Board not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Verify the user has at least view access to this board
-        user = request.user
-        has_access = (
-            board.owner == user
-            or BoardShare.objects.filter(board=board, user=user).exists()
-        )
-        if not has_access and board.course:
-            from apps.courses.models import Enrollment
-            has_access = (
-                board.course.instructor == user
-                or Enrollment.objects.filter(student=user, course=board.course, status='active').exists()
-            )
-        if not has_access:
-            return Response({'error': 'You do not have access to this board.'}, status=status.HTTP_403_FORBIDDEN)
-
-        # Verify this is a quiz board
-        if board.board_type != 'quiz':
-            return Response({'error': 'This board is not a quiz.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        response_data = request.data.get('response')
+        response_data = request.data.get('response') if isinstance(request.data, dict) else None
         if not response_data or not isinstance(response_data, dict):
             return Response({'error': 'response is required and must be an object.'},
                             status=status.HTTP_400_BAD_REQUEST)
+        if len(json.dumps(response_data).encode('utf-8')) > django_settings.QUIZ_RESPONSE_MAX_BYTES:
+            return Response({'error': 'Your response is too large.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user_id = str(request.user.id)
-        content = board.content or {}
-        settings = content.get('quizSettings', {})
-        responses = content.get('responses', {})
+        with transaction.atomic():
+            # Lock the row so two students submitting at once cannot overwrite each other's answers.
+            board = Board.objects.select_for_update().select_related('owner', 'course').filter(pk=pk_int).first()
+            if board is None:
+                return Response({'error': 'Board not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Check if retake is allowed
-        if user_id in responses and not settings.get('allowRetake', False):
-            return Response({'error': 'You have already submitted this quiz and retakes are not allowed.'},
-                            status=status.HTTP_400_BAD_REQUEST)
+            # Verify the user has at least view access to this board
+            if get_board_access(user, board) is None:
+                return Response({'error': 'You do not have access to this board.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # Merge the new response (server-side merge avoids race conditions)
-        # Attach the student's display name so the lecturer leaderboard can show it
-        display_name = f"{request.user.first_name} {request.user.last_name}".strip()
-        if not display_name:
-            display_name = request.user.username
-        response_data['studentName'] = display_name
-        responses[user_id] = response_data
-        content['responses'] = responses
+            # Verify this is a quiz board
+            if board.board_type != 'quiz':
+                return Response({'error': 'This board is not a quiz.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        old_size = board.content_size or 0
-        new_size = calculate_content_size(content)
-        delta = new_size - old_size
+            user_id = str(user.id)
+            content = board.content if isinstance(board.content, dict) else {}
+            quiz_settings = content.get('quizSettings', {})
+            responses = content.get('responses', {})
+            if not isinstance(responses, dict):
+                responses = {}
 
-        board.content = content
-        board.content_size = new_size
-        board.save()
+            # Check if retake is allowed
+            if user_id in responses and not quiz_settings.get('allowRetake', False):
+                return Response({'error': 'You have already submitted this quiz and retakes are not allowed.'},
+                                status=status.HTTP_400_BAD_REQUEST)
 
-        if delta != 0:
-            update_user_storage(board.owner, delta)
+            # Attach the student's display name so the lecturer leaderboard can show it
+            display_name = f"{user.first_name} {user.last_name}".strip() or user.username
+            response_data['studentName'] = display_name
+            responses[user_id] = response_data
+            content['responses'] = responses
 
-        log_action(request.user, 'create', 'quiz_response', board.id,
+            old_size = board.content_size or 0
+            new_size = calculate_content_size(content)
+            delta = new_size - old_size
+
+            board.content = content
+            board.content_size = new_size
+            board.save()
+
+            if delta != 0 and not board.is_archived:
+                update_user_storage(board.owner, delta)
+
+        log_action(user, 'create', 'quiz_response', board.id,
                    {'board_name': board.name, 'score': response_data.get('score')}, request)
 
         return Response({'status': 'ok', 'responses_count': len(responses)})
@@ -445,18 +461,29 @@ class BoardViewSet(viewsets.ModelViewSet):
             )
 
         permission = request.data.get('permission', 'view')
+        if permission not in ('view', 'comment', 'edit'):
+            return Response({'error': 'permission must be view, comment or edit'},
+                            status=status.HTTP_400_BAD_REQUEST)
         expires_in = request.data.get('expires_in')  # hours, null = never
         max_uses = request.data.get('max_uses')  # null = unlimited
 
         expires_at = None
         if expires_in:
-            expires_at = timezone.now() + timezone.timedelta(hours=int(expires_in))
+            hours = _int_or_none(expires_in)
+            if hours is None or hours < 1 or hours > 24 * 365:
+                return Response({'error': 'expires_in must be a number of hours'}, status=status.HTTP_400_BAD_REQUEST)
+            expires_at = timezone.now() + timedelta(hours=hours)
+        uses = None
+        if max_uses:
+            uses = _int_or_none(max_uses)
+            if uses is None or uses < 1 or uses > 100000:
+                return Response({'error': 'max_uses must be a positive number'}, status=status.HTTP_400_BAD_REQUEST)
 
         invite = BoardInviteLink.objects.create(
             board=board,
             permission=permission,
             expires_at=expires_at,
-            max_uses=int(max_uses) if max_uses else None,
+            max_uses=uses,
             created_by=request.user,
         )
 
@@ -487,7 +514,7 @@ class BoardViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        invite_id = request.data.get('invite_id')
+        invite_id = _int_or_none(request.data.get('invite_id'))
         try:
             invite = board.invite_links.get(id=invite_id)
             invite.is_active = False
@@ -508,7 +535,7 @@ class JoinBoardView(APIView):
         """Get board info from invite token (preview before joining)"""
         try:
             invite = BoardInviteLink.objects.select_related('board', 'board__owner').get(token=token)
-        except BoardInviteLink.DoesNotExist:
+        except (BoardInviteLink.DoesNotExist, ValueError, TypeError):
             return Response({'error': 'Invalid invite link'}, status=status.HTTP_404_NOT_FOUND)
 
         if not invite.is_valid:
@@ -529,28 +556,29 @@ class JoinBoardView(APIView):
 
     def post(self, request, token):
         """Join a board using an invite token"""
-        try:
-            invite = BoardInviteLink.objects.select_related('board', 'board__owner').get(token=token)
-        except BoardInviteLink.DoesNotExist:
-            return Response({'error': 'Invalid invite link'}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            try:
+                invite = BoardInviteLink.objects.select_for_update().select_related('board', 'board__owner').get(token=token)
+            except (BoardInviteLink.DoesNotExist, ValueError, TypeError):
+                return Response({'error': 'Invalid invite link'}, status=status.HTTP_404_NOT_FOUND)
 
-        if not invite.is_valid:
-            return Response({'error': 'This invite link has expired or reached its usage limit'}, status=status.HTTP_410_GONE)
+            if not invite.is_valid:
+                return Response({'error': 'This invite link has expired or reached its usage limit'}, status=status.HTTP_410_GONE)
 
-        # Check if already owner
-        if invite.board.owner == request.user:
-            return Response({'error': 'You are the owner of this board'}, status=status.HTTP_400_BAD_REQUEST)
+            # Check if already owner
+            if invite.board.owner == request.user:
+                return Response({'error': 'You are the owner of this board'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create or update share
-        share, created = BoardShare.objects.update_or_create(
-            board=invite.board,
-            user=request.user,
-            defaults={'permission': invite.permission}
-        )
+            # Create the share. An existing, higher permission is never lowered by joining through a weaker link.
+            share = BoardShare.objects.filter(board=invite.board, user=request.user).first()
+            created = share is None
+            if created:
+                share = BoardShare.objects.create(board=invite.board, user=request.user, permission=invite.permission)
+            elif LEVEL_RANK[invite.permission] > LEVEL_RANK[share.permission]:
+                share.permission = invite.permission
+                share.save(update_fields=['permission'])
 
-        # Increment use count
-        invite.use_count += 1
-        invite.save()
+            BoardInviteLink.objects.filter(pk=invite.pk).update(use_count=F('use_count') + 1)
 
         # Notify board owner
         if created:
@@ -560,7 +588,7 @@ class JoinBoardView(APIView):
             'message': 'Successfully joined the board',
             'board_id': invite.board.id,
             'board_name': invite.board.name,
-            'permission': invite.permission,
+            'permission': share.permission,
             'created': created,
         })
 
@@ -575,19 +603,32 @@ class BoardShareViewSet(viewsets.ModelViewSet):
             board__owner=self.request.user
         ).select_related('board', 'user')
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['show_email'] = True  # the board owner sees the addresses of the people they shared with
+        return context
+
     def perform_create(self, serializer):
         """Only board owner can create shares"""
         board = serializer.validated_data['board']
         if board.owner != self.request.user:
-            raise permissions.PermissionDenied('Only the board owner can share the board')
+            raise PermissionDenied('Only the board owner can share the board')
         instance = serializer.save()
         notify_board_shared(board, instance.user, self.request.user)
         send_board_shared_email(instance.user, board, self.request.user)
         log_action(self.request.user, 'share', 'board', board.id, {'shared_with': instance.user.username, 'permission': instance.permission}, self.request)
 
+    def perform_update(self, serializer):
+        """Only the board owner can change a share, and only its permission level."""
+        if serializer.instance.board.owner != self.request.user:
+            raise PermissionDenied('Only the board owner can change shares')
+        instance = serializer.save()
+        log_action(self.request.user, 'share', 'board', instance.board_id,
+                   {'shared_with': instance.user.username, 'permission': instance.permission}, self.request)
+
     def perform_destroy(self, instance):
         """Only board owner can remove shares"""
         if instance.board.owner != self.request.user:
-            raise permissions.PermissionDenied('Only the board owner can remove shares')
+            raise PermissionDenied('Only the board owner can remove shares')
         log_action(self.request.user, 'unshare', 'board', instance.board.id, {'removed_user': instance.user.username}, self.request)
         instance.delete()

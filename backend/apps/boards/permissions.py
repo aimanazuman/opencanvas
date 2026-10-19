@@ -1,43 +1,39 @@
 from rest_framework import permissions
 
+from .access import get_board_access
+
+# Actions any user who can see the board may call (they only touch the caller's own data or make a private copy).
+VIEWER_ACTIONS = {'toggle_star', 'leave', 'duplicate'}
+# Actions that change the shared board itself.
+CONTENT_EDIT_ACTIONS = {'update', 'partial_update'}
+
 
 class IsBoardOwnerOrShared(permissions.BasePermission):
     """
-    Permission to check if user is board owner or has been shared the board.
-    - Owners have full access
-    - Shared users have access based on their permission level (view/comment/edit)
-    - Comment permission: read access + limited writes (adding cards, comments)
+    Object-level access to a board, by access level (see boards/access.py):
+    - owner: everything
+    - instructor of the board's course: everything, including delete
+    - edit share: read, update (content, name, description) and restore_version; no delete
+    - comment share: read and update of the content only (field limits are enforced by the serializer)
+    - view share / enrolled student: read, star, leave and duplicate
+    DELETE is only for the owner and the course instructor.
     """
     def has_object_permission(self, request, view, obj):
-        # Owner has full access
-        if obj.owner == request.user:
+        level = get_board_access(request.user, obj)
+        if level is None:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if level in ('owner', 'instructor'):
             return True
 
-        # Check if board is shared with user
-        from apps.boards.models import BoardShare
-        try:
-            share = BoardShare.objects.get(board=obj, user=request.user)
-            # For safe methods (GET, HEAD, OPTIONS), any permission level is enough
-            if request.method in permissions.SAFE_METHODS:
-                return True
-            # For modification methods, need comment or edit permission
-            return share.permission in ('edit', 'comment')
-        except BoardShare.DoesNotExist:
-            pass
-
-        # Course-based access
-        if obj.course:
-            from apps.courses.models import Enrollment
-            # Course instructor: full access
-            if obj.course.instructor == request.user:
-                return True
-            # Enrolled student: read-only access
-            if request.method in permissions.SAFE_METHODS:
-                if Enrollment.objects.filter(
-                    student=request.user, course=obj.course, status='active'
-                ).exists():
-                    return True
-
+        action = getattr(view, 'action', None)
+        if action in VIEWER_ACTIONS:
+            return True
+        if action in CONTENT_EDIT_ACTIONS:
+            return level in ('edit', 'comment')
+        if action == 'restore_version':
+            return level == 'edit'
         return False
 
 

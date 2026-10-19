@@ -1,19 +1,30 @@
+from django.core.cache import cache
 from django.http import JsonResponse
+
+MAINTENANCE_CACHE_KEY = 'oc:maintenance-mode'
+MAINTENANCE_CACHE_SECONDS = 10
+
+
+def clear_maintenance_cache():
+    """Called when system settings change so the flag is re-read immediately."""
+    try:
+        cache.delete(MAINTENANCE_CACHE_KEY)
+    except Exception:
+        pass
 
 
 class MaintenanceMiddleware:
     """
     Middleware that checks if maintenance mode is enabled.
-    Allows admin users and auth endpoints through.
-    Returns 503 for all other requests.
+    Lets sign-in, token refresh and the Django admin through, plus anything an admin JWT asks for (so the admin can
+    switch maintenance off again). Returns 503 for all other requests.
     """
 
     ALLOWED_PATHS = [
-        '/api/token/',
         '/api/token/refresh/',
         '/api/accounts/login/',
-        '/api/accounts/settings/',
         '/admin/',
+        '/api/health/',
     ]
 
     def __init__(self, get_response):
@@ -21,7 +32,6 @@ class MaintenanceMiddleware:
 
     def __call__(self, request):
         if self._is_maintenance_mode():
-            # Allow certain paths through (auth endpoints + admin settings so admin can toggle it off)
             if any(request.path.startswith(path) for path in self.ALLOWED_PATHS):
                 return self.get_response(request)
 
@@ -54,8 +64,12 @@ class MaintenanceMiddleware:
 
     def _is_maintenance_mode(self):
         try:
-            from apps.accounts.models import SystemSettings
-            settings = SystemSettings.get_all_settings()
-            return settings.get('maintenanceMode', 'false').lower() == 'true'
+            value = cache.get(MAINTENANCE_CACHE_KEY)
+            if value is None:
+                from apps.accounts.models import SystemSettings
+                settings = SystemSettings.get_all_settings()
+                value = settings.get('maintenanceMode', 'false').lower() == 'true'
+                cache.set(MAINTENANCE_CACHE_KEY, value, MAINTENANCE_CACHE_SECONDS)
+            return bool(value)
         except Exception:
             return False

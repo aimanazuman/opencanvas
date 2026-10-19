@@ -2,12 +2,14 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 
+from apps.files.security import upload_avatar_path, upload_institution_logo_path
+
 
 class Institution(models.Model):
     name = models.CharField(max_length=255)
     domain = models.CharField(max_length=255, unique=True, help_text="Email domain for institutional emails (e.g., 'university.edu')")
     code = models.CharField(max_length=50, unique=True)
-    logo = models.ImageField(upload_to='institution_logos/', null=True, blank=True)
+    logo = models.ImageField(upload_to=upload_institution_logo_path,null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -35,7 +37,8 @@ class User(AbstractUser):
     guest_expires_at = models.DateTimeField(null=True, blank=True, help_text="When this guest account will be auto-deleted")
     email_verified = models.BooleanField(default=False, help_text="Whether the user has verified their email address")
     email_verification_token = models.CharField(max_length=64, blank=True, null=True)
-    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    email_verification_sent_at = models.DateTimeField(null=True, blank=True, help_text="When the verification token was issued (it expires)")
+    avatar = models.ImageField(upload_to=upload_avatar_path,null=True, blank=True)
     bio = models.TextField(blank=True)
     institution = models.ForeignKey(Institution, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
     storage_quota = models.BigIntegerField(default=5368709120, help_text="Storage quota in bytes (default: 5GB)")
@@ -148,3 +151,14 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.type}: {self.title} -> {self.user.username}"
+
+
+class CacheEntry(models.Model):
+    """Backing table for Django's database cache (CACHE_BACKEND=db, location "oc_cache"). It is declared as a model
+    so a normal migration creates it; the application never reads or writes it directly."""
+    cache_key = models.CharField(max_length=255, primary_key=True)
+    value = models.TextField()
+    expires = models.DateTimeField(db_index=True)
+
+    class Meta:
+        db_table = 'oc_cache'

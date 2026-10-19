@@ -1,10 +1,15 @@
-import uuid
+import secrets
+
 from django.db import models
 from django.conf import settings
 
+# Unambiguous upper-case alphabet (no 0/O/1/I), 32 symbols = 5 bits per character.
+INVITE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+INVITE_CODE_LENGTH = 16  # 80 bits. Older 8-character codes keep working until the instructor regenerates them.
+
 
 def generate_invite_code():
-    return uuid.uuid4().hex[:8].upper()
+    return ''.join(secrets.choice(INVITE_CODE_ALPHABET) for _ in range(INVITE_CODE_LENGTH))
 
 
 class Course(models.Model):

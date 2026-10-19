@@ -3,6 +3,8 @@ import uuid
 from django.db import models
 from django.conf import settings
 
+from apps.files.security import upload_board_thumbnail_path
+
 
 class Board(models.Model):
     BOARD_TYPE_CHOICES = [
@@ -19,7 +21,7 @@ class Board(models.Model):
     course = models.ForeignKey('courses.Course', on_delete=models.SET_NULL, null=True, blank=True, related_name='boards')
     content = models.JSONField(default=dict, blank=True)
     content_size = models.BigIntegerField(default=0)
-    thumbnail = models.ImageField(upload_to='board_thumbnails/', null=True, blank=True)
+    thumbnail = models.ImageField(upload_to=upload_board_thumbnail_path,null=True, blank=True)
     is_archived = models.BooleanField(default=False)
     is_template = models.BooleanField(default=False)
     board_type = models.CharField(max_length=20, choices=BOARD_TYPE_CHOICES, default='course-material', blank=True)

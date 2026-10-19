@@ -2,6 +2,8 @@ from django.db import models
 from django.conf import settings
 import os
 
+from .security import upload_file_path, upload_file_thumbnail_path
+
 
 class File(models.Model):
     FILE_TYPE_CHOICES = [
@@ -12,11 +14,11 @@ class File(models.Model):
     ]
 
     name = models.CharField(max_length=255)
-    file = models.FileField(upload_to='uploads/')
+    file = models.FileField(upload_to=upload_file_path)
     file_type = models.CharField(max_length=20, choices=FILE_TYPE_CHOICES, default='other')
     file_size = models.BigIntegerField(default=0, help_text="File size in bytes")
     mime_type = models.CharField(max_length=100, blank=True)
-    thumbnail = models.ImageField(upload_to='file_thumbnails/', null=True, blank=True)
+    thumbnail = models.ImageField(upload_to=upload_file_thumbnail_path,null=True, blank=True)
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='files')
     board = models.ForeignKey('boards.Board', on_delete=models.CASCADE, null=True, blank=True, related_name='files')
     is_deleted = models.BooleanField(default=False)

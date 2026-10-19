@@ -1,23 +1,44 @@
 import csv
 import io
-import string
-import secrets
+import logging
+import re
+import zipfile
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from apps.courses.models import Course, Enrollment
-from .emails import send_welcome_email
+from django.contrib.auth.tokens import default_token_generator
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
+
+from apps.courses.models import Enrollment
+from .emails import send_welcome_email, build_set_password_url
 from .models import SystemSettings, Notification
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 REQUIRED_COLUMNS = {'email'}
 EXPECTED_COLUMNS = {'email', 'first_name', 'last_name', 'username', 'section'}
 OPTIONAL_COLUMNS = {'first_name', 'last_name', 'username', 'section'}
 
+MAX_UNPACKED_XLSX_BYTES = 50 * 1024 * 1024
+USERNAME_RE = re.compile(r'^[\w.@+-]{1,150}$')
 
-def generate_password(length=10):
-    """Generate a random password."""
-    alphabet = string.ascii_letters + string.digits
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+class BulkImportError(Exception):
+    """A problem with the uploaded file that is safe to show to the user."""
+
+
+def _max_rows():
+    return int(getattr(settings, 'BULK_IMPORT_MAX_ROWS', 2000))
+
+
+def _clean_cell(value, max_length=150):
+    text = '' if value is None else str(value)
+    text = re.sub(r'<[^>]*>', '', text)
+    return text.strip()[:max_length]
 
 
 def generate_username(email, first_name='', last_name=''):
@@ -31,7 +52,7 @@ def generate_username(email, first_name='', last_name=''):
         base = email.split('@')[0].lower()
 
     # Clean non-alphanumeric chars (except dots)
-    base = ''.join(c for c in base if c.isalnum() or c == '.')
+    base = ''.join(c for c in base if c.isalnum() or c == '.')[:140]
     if not base:
         base = 'student'
 
@@ -45,12 +66,17 @@ def generate_username(email, first_name='', last_name=''):
 
 def parse_csv(file_content):
     """Parse CSV content and return list of row dicts."""
-    text = file_content.decode('utf-8-sig')
+    try:
+        text = file_content.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        raise BulkImportError('The CSV file must be UTF-8 encoded.')
     reader = csv.DictReader(io.StringIO(text))
     rows = []
     for i, row in enumerate(reader, start=2):
+        if len(rows) >= _max_rows():
+            raise BulkImportError(f'The file has more than {_max_rows()} rows.')
         # Normalize keys to lowercase, strip whitespace
-        cleaned = {k.strip().lower().replace(' ', '_'): v.strip() for k, v in row.items() if k}
+        cleaned = {k.strip().lower().replace(' ', '_'): (v or '').strip() for k, v in row.items() if k}
         cleaned['_row'] = i
         rows.append(cleaned)
     return rows
@@ -59,21 +85,32 @@ def parse_csv(file_content):
 def parse_xlsx(file_content):
     """Parse XLSX content and return list of row dicts."""
     import openpyxl
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_content)) as zf:
+            if sum(i.file_size for i in zf.infolist()) > MAX_UNPACKED_XLSX_BYTES:
+                raise BulkImportError('The spreadsheet is too large when unpacked.')
+    except zipfile.BadZipFile:
+        raise BulkImportError('The file is not a valid XLSX spreadsheet.')
+
     wb = openpyxl.load_workbook(io.BytesIO(file_content), read_only=True)
-    ws = wb.active
-    rows = []
-    headers = None
-    for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
-        if i == 1:
-            headers = [str(h).strip().lower().replace(' ', '_') if h else f'col_{j}' for j, h in enumerate(row)]
-            continue
-        cleaned = {}
-        for j, val in enumerate(row):
-            if j < len(headers):
-                cleaned[headers[j]] = str(val).strip() if val is not None else ''
-        cleaned['_row'] = i
-        rows.append(cleaned)
-    wb.close()
+    try:
+        ws = wb.active
+        rows = []
+        headers = None
+        for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
+            if i == 1:
+                headers = [str(h).strip().lower().replace(' ', '_') if h else f'col_{j}' for j, h in enumerate(row)]
+                continue
+            if len(rows) >= _max_rows():
+                raise BulkImportError(f'The file has more than {_max_rows()} rows.')
+            cleaned = {}
+            for j, val in enumerate(row):
+                if j < len(headers):
+                    cleaned[headers[j]] = str(val).strip() if val is not None else ''
+            cleaned['_row'] = i
+            rows.append(cleaned)
+    finally:
+        wb.close()
     return rows
 
 
@@ -88,7 +125,7 @@ def validate_rows(rows):
     # Check required columns exist
     sample_keys = set(rows[0].keys()) - {'_row'}
     if 'email' not in sample_keys:
-        return [], [{'row': 0, 'error': "Missing required column 'email'. Found columns: " + ', '.join(sorted(sample_keys))}]
+        return [], [{'row': 0, 'error': "Missing required column 'email'. Found columns: " + ', '.join(sorted(sample_keys))[:300]}]
 
     seen_emails = set()
     for row in rows:
@@ -99,8 +136,10 @@ def validate_rows(rows):
             errors.append({'row': row_num, 'error': 'Email is required'})
             continue
 
-        if '@' not in email or '.' not in email.split('@')[-1]:
-            errors.append({'row': row_num, 'error': f"Invalid email: {email}"})
+        try:
+            validate_email(email)
+        except DjangoValidationError:
+            errors.append({'row': row_num, 'error': 'Invalid email address'})
             continue
 
         if email in seen_emails:
@@ -108,12 +147,15 @@ def validate_rows(rows):
             continue
 
         seen_emails.add(email)
+        username = _clean_cell(row.get('username', ''))
+        if username and not USERNAME_RE.match(username):
+            username = ''  # fall back to a generated username
         valid.append({
             'email': email,
-            'first_name': row.get('first_name', '').strip(),
-            'last_name': row.get('last_name', '').strip(),
-            'username': row.get('username', '').strip(),
-            'section': row.get('section', '').strip(),
+            'first_name': _clean_cell(row.get('first_name', '')),
+            'last_name': _clean_cell(row.get('last_name', '')),
+            'username': username,
+            'section': _clean_cell(row.get('section', ''), 50),
             '_row': row_num,
         })
 
@@ -141,7 +183,7 @@ def validate_bulk_import_sections(rows, course):
             continue
 
         if valid_section_names and section.lower() not in valid_section_names:
-            errors.append({'row': row_num, 'error': f'Section "{section}" does not exist in course. Available sections: {", ".join(course_sections)}'})
+            errors.append({'row': row_num, 'error': f'Section "{section}" does not exist in course. Available sections: {", ".join(str(s) for s in course_sections)}'})
             continue
 
         valid.append(row)
@@ -149,18 +191,14 @@ def validate_bulk_import_sections(rows, course):
     return valid, errors
 
 
-def process_bulk_import(rows, course_id, send_emails=True, created_by=None):
+def process_bulk_import(rows, course=None, send_emails=True, created_by=None, reveal_existing=False):
     """
     Process validated rows: create users, enroll in course, send emails.
+    `course` must already have been checked by the caller (the lecturer teaches it, or the caller is an admin).
+    New accounts get an unusable password and a one-time "set your password" link by e-mail; no password is generated
+    or sent. `reveal_existing` (admins only) includes the username of accounts that already exist.
     Returns results dict.
     """
-    course = None
-    if course_id:
-        try:
-            course = Course.objects.get(id=course_id)
-        except Course.DoesNotExist:
-            return {'success': False, 'error': f'Course ID {course_id} not found'}
-
     # Validate sections against course if course is specified
     if course:
         rows, section_errors = validate_bulk_import_sections(rows, course)
@@ -190,19 +228,15 @@ def process_bulk_import(rows, course_id, send_emails=True, created_by=None):
 
         try:
             # Check if user already exists
-            existing_user = User.objects.filter(email=email).first()
+            existing_user = User.objects.filter(email__iexact=email).first()
 
             if existing_user:
                 user = existing_user
-                results['existing'].append({
-                    'row': row_num,
-                    'email': email,
-                    'username': user.username,
-                    'message': 'User already exists',
-                })
+                entry = {'row': row_num, 'email': email, 'message': 'User already exists'}
+                if reveal_existing:
+                    entry['username'] = user.username
+                results['existing'].append(entry)
             else:
-                # Create new user
-                password = generate_password()
                 username = row.get('username') or generate_username(
                     email, row.get('first_name', ''), row.get('last_name', '')
                 )
@@ -211,16 +245,18 @@ def process_bulk_import(rows, course_id, send_emails=True, created_by=None):
                 if User.objects.filter(username=username).exists():
                     username = generate_username(email, row.get('first_name', ''), row.get('last_name', ''))
 
-                user = User.objects.create_user(
+                user = User(
                     username=username,
                     email=email,
-                    password=password,
                     first_name=row.get('first_name', ''),
                     last_name=row.get('last_name', ''),
                     role='student',
                     storage_quota=default_quota,
-                    email_verified=True,
+                    # Not verified until the person uses the emailed set-password link.
+                    email_verified=False,
                 )
+                user.set_unusable_password()
+                user.save()
 
                 results['created'].append({
                     'row': row_num,
@@ -228,13 +264,12 @@ def process_bulk_import(rows, course_id, send_emails=True, created_by=None):
                     'username': username,
                 })
 
-                # Send welcome email
+                # Send welcome email with a one-time set-password link
                 if send_emails:
-                    try:
-                        send_welcome_email(user, password, course)
-                        results['emails_sent'] += 1
-                    except Exception:
-                        pass  # Email failures are non-critical
+                    uid = urlsafe_base64_encode(force_bytes(user.pk))
+                    token = default_token_generator.make_token(user)
+                    send_welcome_email(user, build_set_password_url(uid, token), course)
+                    results['emails_sent'] += 1
 
             # Enroll in course if specified
             if course:
@@ -259,11 +294,12 @@ def process_bulk_import(rows, course_id, send_emails=True, created_by=None):
                         message=f'You have been enrolled in {course.code} - {course.name}.',
                     )
 
-        except Exception as e:
+        except Exception:
+            logger.warning('Bulk import row %s failed', row_num, exc_info=False)
             results['errors'].append({
                 'row': row_num,
                 'email': email,
-                'error': str(e),
+                'error': 'This row could not be imported.',
             })
 
     # Include section validation errors in the errors list

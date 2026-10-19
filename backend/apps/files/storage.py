@@ -1,5 +1,23 @@
 import json
-from django.db.models import Sum
+
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.db.models import F, Sum, Value
+from django.db.models.functions import Greatest
+
+
+class QuotaExceeded(Exception):
+    """Raised by charge_storage. `scope` is 'user' or 'system'."""
+
+    def __init__(self, scope):
+        self.scope = scope
+        super().__init__(scope)
+
+    @property
+    def message(self):
+        if self.scope == 'system':
+            return "System storage limit reached. Please contact an administrator."
+        return "Storage quota exceeded. Please free up space or contact an administrator."
 
 
 def calculate_content_size(content):
@@ -10,9 +28,31 @@ def calculate_content_size(content):
 
 
 def update_user_storage(user, delta):
-    """Adjust user.storage_used by delta bytes, clamped to >= 0."""
-    user.storage_used = max(0, user.storage_used + delta)
-    user.save(update_fields=['storage_used'])
+    """Adjust user.storage_used by delta bytes, clamped to >= 0. The change is made by the database in a single
+    UPDATE (no read-modify-write), so two requests at the same time cannot overwrite each other."""
+    User = get_user_model()
+    User.objects.filter(pk=user.pk).update(storage_used=Greatest(F('storage_used') + delta, Value(0)))
+    user.refresh_from_db(fields=['storage_used'])
+
+
+def charge_storage(user, delta):
+    """Atomically check the quotas and charge `delta` bytes to `user`.
+
+    The user row is locked (SELECT ... FOR UPDATE) while the quota is checked and the counter changes, so two uploads
+    at the same time cannot both squeeze under the limit. Raises QuotaExceeded. A negative delta only frees space.
+    """
+    User = get_user_model()
+    with transaction.atomic():
+        locked = User.objects.select_for_update().get(pk=user.pk)
+        if delta > 0:
+            ok, _ = check_quota(locked, delta)
+            if not ok:
+                raise QuotaExceeded('user')
+            sys_ok, _ = check_system_quota(delta)
+            if not sys_ok:
+                raise QuotaExceeded('system')
+        update_user_storage(locked, delta)
+    user.storage_used = locked.storage_used
 
 
 def get_effective_quota(user):

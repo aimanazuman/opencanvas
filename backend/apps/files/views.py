@@ -1,16 +1,39 @@
-from rest_framework import viewsets, permissions, parsers, status, generics
+import re
+from urllib.parse import unquote, urlparse
+
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.db.models import Sum, Q
+from rest_framework import viewsets, permissions, parsers, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.exceptions import ValidationError
-from django.db.models import Sum, Count, Q
-from django.contrib.auth import get_user_model
-from .models import File
-from .serializers import FileSerializer
+
 from apps.accounts.audit import log_action
 from apps.accounts.models import Notification
+from apps.boards.models import Board
+from .access import can_access_file
+from .models import File
+from .security import (
+    KIND_FILE, KIND_FILE_THUMB, delete_stored_file, signed_media_url,
+)
+from .serializers import FileSerializer, MEDIA_REF_PREFIX
+from .storage import charge_storage, update_user_storage, QuotaExceeded
 
 User = get_user_model()
+
+
+def soft_delete_file(file_obj):
+    """Mark a file deleted, give the space back to its owner and remove the bytes from disk."""
+    if file_obj.is_deleted:
+        return
+    with transaction.atomic():
+        file_obj.is_deleted = True
+        file_obj.save(update_fields=['is_deleted', 'updated_at'])
+        update_user_storage(file_obj.uploaded_by, -file_obj.file_size)
+        stored = [f for f in (file_obj.file, file_obj.thumbnail) if f and f.name]
+        transaction.on_commit(lambda: [delete_stored_file(f) for f in stored])
 
 
 class FileViewSet(viewsets.ModelViewSet):
@@ -22,30 +45,21 @@ class FileViewSet(viewsets.ModelViewSet):
         return File.objects.filter(uploaded_by=self.request.user, is_deleted=False)
 
     def perform_create(self, serializer):
-        from apps.files.storage import check_quota, check_system_quota
+        from apps.files.storage import get_effective_quota
 
         file_obj = serializer.validated_data.get('file')
         user = self.request.user
         file_size = file_obj.size if file_obj else 0
 
-        # Check user quota (respects system-wide limit via get_effective_quota)
-        ok, _ = check_quota(user, file_size)
-        if not ok:
-            raise ValidationError("Storage quota exceeded. Please free up space or contact an administrator.")
-
-        # Check system-wide quota
-        sys_ok, _ = check_system_quota(file_size)
-        if not sys_ok:
-            raise ValidationError("System storage limit reached. Please contact an administrator.")
-
-        instance = serializer.save(uploaded_by=user, file_size=file_size)
-
-        # Update user storage
-        user.storage_used += instance.file_size
-        user.save()
+        # The quota check and the charge happen under a row lock, so parallel uploads cannot overshoot the limit.
+        with transaction.atomic():
+            try:
+                charge_storage(user, file_size)
+            except QuotaExceeded as exc:
+                raise ValidationError(exc.message)
+            instance = serializer.save(uploaded_by=user, file_size=file_size)
 
         # Check storage thresholds and create notifications
-        from apps.files.storage import get_effective_quota
         effective_quota = get_effective_quota(user)
         if effective_quota > 0:
             pct = (user.storage_used / effective_quota) * 100
@@ -82,16 +96,8 @@ class FileViewSet(viewsets.ModelViewSet):
         return response
 
     def perform_destroy(self, instance):
-        # Soft delete and update storage usage
-        instance.is_deleted = True
-        instance.save()
-
-        user = instance.uploaded_by
-        user.storage_used -= instance.file_size
-        if user.storage_used < 0:
-            user.storage_used = 0
-        user.save()
-
+        # Soft delete: the row stays for accounting, the stored bytes are removed and the space is returned.
+        soft_delete_file(instance)
         log_action(self.request.user, 'delete', 'file', instance.id, {'name': instance.name}, self.request)
 
     @action(detail=False, methods=['get'])
@@ -112,6 +118,74 @@ class FileViewSet(viewsets.ModelViewSet):
         })
 
 
+MAX_RESOLVE_REFS = 200
+LEGACY_MEDIA_RE = re.compile(r'/media/(?!f/)(.+)$')
+
+
+def parse_media_ref(ref):
+    """Turn a reference found in board content into a storage name, or None.
+    Accepted: "ocmedia:uploads/<name>" (current) and old public URLs such as https://host/media/uploads/<name>."""
+    if not isinstance(ref, str) or not ref or len(ref) > 1000:
+        return None
+    if ref.startswith(MEDIA_REF_PREFIX):
+        name = ref[len(MEDIA_REF_PREFIX):]
+    else:
+        match = LEGACY_MEDIA_RE.search(unquote(urlparse(ref).path))
+        if not match:
+            return None
+        name = match.group(1)
+    name = name.lstrip('/')
+    if not name or '..' in name.split('/') or '\\' in name or name.startswith('f/'):
+        return None
+    return name
+
+
+class ResolveMediaView(APIView):
+    """Exchange stored file references for short-lived signed URLs, only for files the caller may see.
+
+    POST {"refs": ["ocmedia:uploads/x.png", "https://host/media/uploads/old.png"], "board_id": 12}
+    -> {"urls": {"<ref>": "<signed url>" | null}}
+    `board_id` tells the server which board the references were found in (files embedded in a board are readable by
+    everyone who can view that board).
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        data = request.data if isinstance(request.data, dict) else {}
+        refs = data.get('refs')
+        if not isinstance(refs, list) or len(refs) > MAX_RESOLVE_REFS:
+            return Response({'error': f'refs must be a list of at most {MAX_RESOLVE_REFS} items'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        board = None
+        board_id = data.get('board_id')
+        if board_id not in (None, ''):
+            try:
+                board = Board.objects.select_related('owner', 'course').filter(pk=int(board_id)).first()
+            except (TypeError, ValueError):
+                return Response({'error': 'board_id must be a number'}, status=status.HTTP_400_BAD_REQUEST)
+
+        urls = {}
+        for ref in refs:
+            urls[ref if isinstance(ref, str) else str(ref)] = self._resolve_one(request, ref, board)
+        return Response({'urls': urls})
+
+    def _resolve_one(self, request, ref, board):
+        name = parse_media_ref(ref)
+        if name is None:
+            return None
+        file_obj = File.objects.select_related('board', 'uploaded_by').filter(
+            Q(file=name) | Q(thumbnail=name), is_deleted=False).first()
+        if file_obj is None:
+            return None
+        kind = KIND_FILE if file_obj.file.name == name else KIND_FILE_THUMB
+        if can_access_file(request.user, file_obj):
+            return signed_media_url(request, kind, file_obj.id, request.user.id)
+        if board is not None and can_access_file(request.user, file_obj, board):
+            return signed_media_url(request, kind, file_obj.id, request.user.id, board.id)
+        return None
+
+
 class AdminFileDeleteView(APIView):
     """
     Admin-only endpoint to delete a file with a reason/notice sent to the owner.
@@ -123,27 +197,21 @@ class AdminFileDeleteView(APIView):
             return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
 
         try:
-            file_obj = File.objects.get(pk=pk, is_deleted=False)
+            file_obj = File.objects.select_related('uploaded_by').get(pk=pk, is_deleted=False)
         except File.DoesNotExist:
             return Response({'error': 'File not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        reason = request.data.get('reason', 'Policy violation')
-        custom_message = request.data.get('message', '')
+        reason = str(request.data.get('reason', 'Policy violation'))[:200]
+        custom_message = str(request.data.get('message', ''))[:1000]
 
         # Build the notification message
         notice_message = f'Your file "{file_obj.name}" ({file_obj.size_mb:.1f} MB) has been removed by an administrator.\n\nReason: {reason}'
         if custom_message:
             notice_message += f'\n\nAdditional details: {custom_message}'
 
-        # Soft-delete and update storage
-        file_obj.is_deleted = True
-        file_obj.save()
-
         owner = file_obj.uploaded_by
-        owner.storage_used -= file_obj.file_size
-        if owner.storage_used < 0:
-            owner.storage_used = 0
-        owner.save()
+        # Soft-delete, return the space and remove the stored bytes
+        soft_delete_file(file_obj)
 
         # Notify the file owner
         Notification.objects.create(
@@ -174,7 +242,6 @@ class StorageStatsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        from apps.accounts.permissions import IsAdminUser
         from apps.boards.models import Board
 
         if request.user.role != 'admin':

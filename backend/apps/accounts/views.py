@@ -1,67 +1,118 @@
+import csv as csv_module
+import json
+import logging
+from datetime import timedelta
+from uuid import uuid4
+
+from django.conf import settings as django_settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
+from django.db.models import Q
+from django.http import HttpResponse
+from django.utils import timezone
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
-from django.contrib.auth import get_user_model
-from django.contrib.auth.tokens import default_token_generator
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes, force_str
-from .serializers import (
-    UserSerializer, AdminUserSerializer, RegisterSerializer, LoginSerializer,
-    ChangePasswordSerializer, PasswordResetRequestSerializer,
-    PasswordResetConfirmSerializer, ConvertGuestSerializer, NotificationSerializer
+
+from opencanvas.clientip import get_client_ip
+from opencanvas.middleware import clear_maintenance_cache
+from opencanvas.throttling import (
+    with_defaults, LoginThrottle, RegisterThrottle, PasswordResetThrottle, ResendVerificationThrottle,
+    VerifyEmailThrottle, GuestCreateThrottle,
 )
-from .permissions import IsAdminUser, IsLecturerOrAdmin
-from .models import AuditLog, SystemSettings, Notification
 from .audit import log_action
-from .bulk_import import parse_csv, parse_xlsx, validate_rows, process_bulk_import
-from .emails import send_password_reset_email, send_password_reset_confirmation_email, send_verification_email
-from django.db.models import Q
-from django.utils import timezone
-from datetime import timedelta
-from uuid import uuid4
-import json
-import re
+from .bulk_import import parse_csv, parse_xlsx, validate_rows, process_bulk_import, BulkImportError
+from .emails import (
+    send_password_reset_email, send_password_reset_confirmation_email, send_verification_email,
+    send_welcome_email, build_set_password_url,
+)
+from .models import AuditLog, SystemSettings, Notification
+from .permissions import IsAdminUser, IsLecturerOrAdmin
+from .security import (
+    lockout_seconds_left, record_login_failure, clear_login_failures, blacklist_user_tokens,
+)
+from .serializers import (
+    UserSerializer, ProfileUpdateSerializer, AdminUserSerializer, RegisterSerializer,
+    LoginSerializer, ChangePasswordSerializer, PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
+    ConvertGuestSerializer, NotificationSerializer, UserSearchResultSerializer, run_password_validators,
+)
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
+
+# System settings an administrator may write. Unknown keys are rejected so the table cannot be filled with junk.
+ALLOWED_SETTING_KEYS = {
+    'siteName', 'siteUrl', 'adminEmail', 'backupFrequency', 'allowRegistration', 'requireEmailVerification',
+    'sessionTimeout', 'maintenanceMode', 'enableNotifications', 'enableAnalytics', 'allowUsernameChange',
+    'usernameChangeCooldownDays', 'maxUsernameChanges', 'allowEmailChange', 'emailChangeCooldownDays',
+    'maxEmailChanges', 'defaultStorageQuota', 'systemStorageLimit',
+}
+MAX_SETTING_VALUE_LENGTH = 500
+EMAIL_VERIFICATION_MAX_AGE_DAYS = 7
+
+
+def _token_payload(user):
+    refresh = RefreshToken.for_user(user)
+    return {'refresh': str(refresh), 'access': str(refresh.access_token)}
+
+
+def _verification_required():
+    return SystemSettings.get_all_settings().get('requireEmailVerification', 'true').lower() == 'true'
+
+
+def _issue_verification_token(user):
+    user.email_verification_token = uuid4().hex
+    user.email_verification_sent_at = timezone.now()
+    user.save(update_fields=['email_verification_token', 'email_verification_sent_at'])
+
+
+def _make_uid_and_token(user):
+    return urlsafe_base64_encode(force_bytes(user.pk)), default_token_generator.make_token(user)
 
 
 class RegisterView(generics.CreateAPIView):
     """
-    Register a new user account.
+    Register a new user account. The role is always "student"; staff accounts are created by an administrator.
     """
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+    throttle_classes = with_defaults(RegisterThrottle)
 
     def create(self, request, *args, **kwargs):
+        all_settings = SystemSettings.get_all_settings()
+        if all_settings.get('allowRegistration', 'true').lower() == 'false':
+            return Response({'error': 'Registration is currently disabled.'}, status=status.HTTP_403_FORBIDDEN)
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
         # Apply default storage quota from system settings
         try:
-            default_gb = float(SystemSettings.get_all_settings().get('defaultStorageQuota', '5'))
+            default_gb = float(all_settings.get('defaultStorageQuota', '5'))
             user.storage_quota = int(default_gb * (1024 ** 3))
         except (ValueError, TypeError):
             pass
 
-        # Check if email verification is required
-        all_settings = SystemSettings.get_all_settings()
         require_verification = all_settings.get('requireEmailVerification', 'true').lower() == 'true'
 
         if require_verification:
             user.email_verification_token = uuid4().hex
+            user.email_verification_sent_at = timezone.now()
             user.email_verified = False
-            user.save(update_fields=['storage_quota', 'email_verification_token', 'email_verified'])
+            user.save(update_fields=['storage_quota', 'email_verification_token',
+                                     'email_verification_sent_at', 'email_verified'])
             send_verification_email(user)
 
             log_action(user, 'create', 'user', user.id, {'username': user.username}, request)
 
             # Return user data but no tokens — user must verify first
             return Response({
-                'user': UserSerializer(user).data,
+                'user': UserSerializer(user, context={'request': request}).data,
                 'requires_verification': True,
                 'message': 'Account created. Please check your email to verify your account.'
             }, status=status.HTTP_201_CREATED)
@@ -69,17 +120,11 @@ class RegisterView(generics.CreateAPIView):
             user.email_verified = True
             user.save(update_fields=['storage_quota', 'email_verified'])
 
-            # Generate JWT tokens for the new user
-            refresh = RefreshToken.for_user(user)
-
             log_action(user, 'create', 'user', user.id, {'username': user.username}, request)
 
             return Response({
-                'user': UserSerializer(user).data,
-                'tokens': {
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
-                },
+                'user': UserSerializer(user, context={'request': request}).data,
+                'tokens': _token_payload(user),
                 'message': 'User registered successfully'
             }, status=status.HTTP_201_CREATED)
 
@@ -87,37 +132,51 @@ class RegisterView(generics.CreateAPIView):
 class LoginView(APIView):
     """
     Login with username and password, returns JWT tokens.
+    After LOGIN_MAX_FAILURES failures inside LOGIN_FAILURE_WINDOW seconds, the same username from the same IP is
+    refused (HTTP 429) until the window ends.
     """
     permission_classes = [permissions.AllowAny]
+    throttle_classes = with_defaults(LoginThrottle)
 
     def post(self, request):
-        serializer = LoginSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        data = request.data if isinstance(request.data, dict) else {}
+        username = str(data.get('username') or '')[:254]
+        ip = get_client_ip(request)
+
+        wait = lockout_seconds_left(username, ip)
+        if wait:
+            response = Response(
+                {'error': 'Too many failed login attempts. Please try again later.', 'retry_after': wait},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+            response['Retry-After'] = str(wait)
+            return response
+
+        serializer = LoginSerializer(data=request.data, context={'request': request})
+        if not serializer.is_valid():
+            if username and data.get('password'):
+                record_login_failure(username, ip)
+                target = User.objects.filter(username__iexact=username).first()
+                log_action(target, 'login', 'user', target.id if target else None,
+                           {'success': False, 'username': username[:150]}, request)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         user = serializer.validated_data['user']
+        clear_login_failures(username, ip)
 
         # Check if email verification is required and user hasn't verified
-        all_settings = SystemSettings.get_all_settings()
-        require_verification = all_settings.get('requireEmailVerification', 'true').lower() == 'true'
-
-        if require_verification and not user.email_verified and not user.is_guest:
+        if _verification_required() and not user.email_verified and not user.is_guest:
             return Response({
                 'requires_verification': True,
                 'email': user.email,
                 'message': 'Please verify your email address before logging in.'
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # Generate JWT tokens
-        refresh = RefreshToken.for_user(user)
-
         log_action(user, 'login', 'user', user.id, {'username': user.username}, request)
 
         return Response({
-            'user': UserSerializer(user).data,
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            },
+            'user': UserSerializer(user, context={'request': request}).data,
+            'tokens': _token_payload(user),
             'message': 'Login successful'
         }, status=status.HTTP_200_OK)
 
@@ -129,36 +188,42 @@ class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        try:
-            refresh_token = request.data.get('refresh_token')
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-                log_action(request.user, 'logout', 'user', request.user.id, {}, request)
-                return Response({'message': 'Logout successful'}, status=status.HTTP_200_OK)
+        refresh_token = request.data.get('refresh_token') if isinstance(request.data, dict) else None
+        if not refresh_token:
             return Response({'error': 'Refresh token is required'}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except Exception:
+            return Response({'error': 'Invalid or expired token'}, status=status.HTTP_400_BAD_REQUEST)
+        log_action(request.user, 'logout', 'user', request.user.id, {}, request)
+        return Response({'message': 'Logout successful'}, status=status.HTTP_200_OK)
 
 
 class ProfileView(generics.RetrieveUpdateAPIView):
     """
-    Get or update current user profile.
+    Get or update current user profile. Only username, email, names, bio, avatar and preferences can be changed.
     """
-    serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.request.method in ('PUT', 'PATCH'):
+            return ProfileUpdateSerializer
+        return UserSerializer
 
     def get_object(self):
         return self.request.user
 
     def perform_update(self, serializer):
         instance = serializer.save()
-        log_action(self.request.user, 'update', 'user', instance.id, {'fields': list(serializer.validated_data.keys())}, self.request)
+        log_action(self.request.user, 'update', 'user', instance.id,
+                   {'fields': sorted(serializer.validated_data.keys())}, self.request)
 
 
 class ChangePasswordView(APIView):
     """
-    Change password for the current user.
+    Change password for the current user. Every refresh token is revoked and fresh tokens are returned, so the
+    current browser stays signed in while stolen tokens stop working.
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -166,10 +231,17 @@ class ChangePasswordView(APIView):
         serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             user = request.user
+            try:
+                run_password_validators(serializer.validated_data['new_password'], user)
+            except Exception as exc:
+                detail = getattr(exc, 'detail', None)
+                return Response({'new_password': detail or ['Invalid password.']}, status=status.HTTP_400_BAD_REQUEST)
             user.set_password(serializer.validated_data['new_password'])
             user.save()
+            blacklist_user_tokens(user)
             log_action(user, 'update', 'user', user.id, {'action': 'password_change'}, request)
-            return Response({'message': 'Password changed successfully'}, status=status.HTTP_200_OK)
+            return Response({'message': 'Password changed successfully', 'tokens': _token_payload(user)},
+                            status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -178,18 +250,15 @@ class PasswordResetRequestView(APIView):
     Request a password reset. Sends a reset link via email (MailHog in development).
     """
     permission_classes = [permissions.AllowAny]
+    throttle_classes = with_defaults(PasswordResetThrottle)
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data['email']
-            try:
-                user = User.objects.get(email=email)
-                uid = urlsafe_base64_encode(force_bytes(user.pk))
-                token = default_token_generator.make_token(user)
+            for user in User.objects.filter(email__iexact=email, is_active=True)[:3]:
+                uid, token = _make_uid_and_token(user)
                 send_password_reset_email(user, uid, token)
-            except User.DoesNotExist:
-                pass
             # Always return a generic message to avoid email enumeration
             return Response({
                 'message': 'If an account exists with this email, a reset link has been sent.',
@@ -199,37 +268,45 @@ class PasswordResetRequestView(APIView):
 
 class PasswordResetConfirmView(APIView):
     """
-    Confirm password reset with uid + token.
+    Confirm password reset (also used by the "set your password" link in welcome emails) with uid + token.
     """
     permission_classes = [permissions.AllowAny]
+    throttle_classes = with_defaults(PasswordResetThrottle)
+
+    INVALID = {'error': 'Invalid or expired link. Please request a new one.'}
 
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
-        if serializer.is_valid():
-            uid = serializer.validated_data.get('uid', '')
-            token = serializer.validated_data['token']
-            new_password = serializer.validated_data['new_password']
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            try:
-                user_id = force_str(urlsafe_base64_decode(uid))
-                user = User.objects.get(pk=user_id)
-            except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-                return Response(
-                    {'error': 'Invalid reset link. The link may have expired.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        uid = serializer.validated_data.get('uid', '')
+        token = serializer.validated_data['token']
+        new_password = serializer.validated_data['new_password']
 
-            if not default_token_generator.check_token(user, token):
-                return Response(
-                    {'error': 'Invalid or expired token. Please request a new reset.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        try:
+            user = User.objects.get(pk=force_str(urlsafe_base64_decode(uid)))
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            user = None
 
-            user.set_password(new_password)
-            user.save()
-            send_password_reset_confirmation_email(user)
-            return Response({'message': 'Password reset successful.'}, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if user is None or not user.is_active or not default_token_generator.check_token(user, token):
+            return Response(self.INVALID, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            run_password_validators(new_password, user)
+        except Exception as exc:
+            return Response({'new_password': getattr(exc, 'detail', ['Invalid password.'])},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        # The link was delivered to the account's mailbox, so following it proves control of that address.
+        user.email_verified = True
+        user.email_verification_token = None
+        user.save()
+        blacklist_user_tokens(user)
+        log_action(user, 'update', 'user', user.id, {'action': 'password_reset'}, request)
+        send_password_reset_confirmation_email(user)
+        return Response({'message': 'Password reset successful.'}, status=status.HTTP_200_OK)
 
 
 class UserListView(generics.ListAPIView):
@@ -266,55 +343,78 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAdminUser]
 
     def perform_update(self, serializer):
-        old_quota = serializer.instance.storage_quota
+        before = {f: getattr(serializer.instance, f) for f in ('role', 'storage_quota', 'is_active', 'email')}
         instance = serializer.save()
-        new_quota = instance.storage_quota
-        if new_quota != old_quota:
-            old_gb = round(old_quota / (1024 ** 3), 2)
-            new_gb = round(new_quota / (1024 ** 3), 2)
+        changes = {}
+        for field, old in before.items():
+            new = getattr(instance, field)
+            if new != old:
+                changes[field] = {'from': old, 'to': new}
+        if 'password' in serializer.validated_data and serializer.validated_data.get('password'):
+            changes['password'] = 'changed'
+            blacklist_user_tokens(instance)
+        if 'role' in changes or ('is_active' in changes and not instance.is_active):
+            blacklist_user_tokens(instance)
+
+        if 'storage_quota' in changes:
+            old_gb = round(before['storage_quota'] / (1024 ** 3), 2)
+            new_gb = round(instance.storage_quota / (1024 ** 3), 2)
             Notification.objects.create(
                 user=instance,
                 type='quota_changed',
                 title='Storage Quota Updated',
                 message=f'Your storage quota has been changed from {old_gb} GB to {new_gb} GB by an administrator.',
             )
+        log_action(self.request.user, 'update', 'user', instance.id,
+                   {'action': 'admin_update', 'target': instance.username, 'changes': changes}, self.request)
+
+    def perform_destroy(self, instance):
+        if instance.id == self.request.user.id:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('You cannot delete your own account here.')
+        log_action(self.request.user, 'delete', 'user', instance.id,
+                   {'action': 'admin_delete', 'target': instance.username, 'role': instance.role}, self.request)
+        instance.delete()
 
 
 class UserCreateView(generics.CreateAPIView):
     """
-    Create a new user (Admin only). Sends a welcome email with credentials.
+    Create a new user (Admin only). The welcome email contains a one-time, time-limited link to choose a password;
+    it never contains a password. The address counts as verified once that link has been used.
     """
     queryset = User.objects.all()
     serializer_class = AdminUserSerializer
     permission_classes = [IsAdminUser]
 
     def perform_create(self, serializer):
-        # Grab the plain-text password before the serializer hashes it
-        password = self.request.data.get('password', '')
-        # Admin-created users are automatically email-verified
-        instance = serializer.save(email_verified=True)
-        if password and instance.email:
-            from apps.accounts.emails import send_welcome_email
-            send_welcome_email(instance, password)
+        # An account without an e-mail address has nothing to verify.
+        instance = serializer.save(email_verified=not bool(serializer.validated_data.get('email')))
+        if instance.email:
+            uid, token = _make_uid_and_token(instance)
+            send_welcome_email(instance, build_set_password_url(uid, token))
+        log_action(self.request.user, 'create', 'user', instance.id,
+                   {'action': 'admin_create', 'target': instance.username, 'role': instance.role}, self.request)
 
 
 class UserSearchView(generics.ListAPIView):
     """
-    Search users by name or email. For share/invite functionality.
+    Search users by name or username, for the share and invite dialogs. Needs 3+ characters, never returns guests
+    or e-mail addresses (a masked hint is returned instead). Staff may also find a person by exact e-mail address.
     """
-    serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
+    MIN_QUERY_LENGTH = 3
+
+    serializer_class = UserSearchResultSerializer
 
     def get_queryset(self):
-        q = self.request.query_params.get('q', '')
-        if len(q) < 2:
+        q = (self.request.query_params.get('q', '') or '').strip()
+        if len(q) < self.MIN_QUERY_LENGTH:
             return User.objects.none()
-        return User.objects.filter(
-            Q(first_name__icontains=q) |
-            Q(last_name__icontains=q) |
-            Q(email__icontains=q) |
-            Q(username__icontains=q)
-        ).filter(is_guest=False).exclude(id=self.request.user.id)[:10]
+        match = Q(first_name__icontains=q) | Q(last_name__icontains=q) | Q(username__icontains=q)
+        if self.request.user.role in ('lecturer', 'admin'):
+            match |= Q(email__iexact=q)
+        return User.objects.filter(match, is_guest=False, is_active=True).exclude(
+            id=self.request.user.id).order_by('username')[:10]
 
 
 class SystemSettingsView(APIView):
@@ -352,9 +452,38 @@ class SystemSettingsView(APIView):
 
     def put(self, request):
         data = request.data
+        if not isinstance(data, dict):
+            return Response({'error': 'A JSON object is expected.'}, status=status.HTTP_400_BAD_REQUEST)
+        unknown = sorted(k for k in data.keys() if k not in ALLOWED_SETTING_KEYS)
+        if unknown:
+            return Response({'error': 'Unknown setting(s): ' + ', '.join(str(k)[:50] for k in unknown)},
+                            status=status.HTTP_400_BAD_REQUEST)
+        for key, value in data.items():
+            if isinstance(value, (dict, list)) or len(str(value)) > MAX_SETTING_VALUE_LENGTH:
+                return Response({'error': f'Invalid value for {key}.'}, status=status.HTTP_400_BAD_REQUEST)
+        changed = {}
         for key, value in data.items():
             SystemSettings.set_setting(key, value, user=request.user)
+            changed[key] = str(value)[:100]
+        clear_maintenance_cache()
+        log_action(request.user, 'update', 'settings', None, {'action': 'settings_change', 'changed': changed}, request)
         return Response({'message': 'Settings updated successfully'})
+
+
+def _clamp_limit(request, default, maximum=None):
+    maximum = maximum or int(django_settings.AUDIT_LOG_MAX_LIMIT)
+    try:
+        value = int(request.query_params.get('limit', default))
+    except (TypeError, ValueError):
+        value = default
+    return max(1, min(value, maximum))
+
+
+def _csv_cell(value):
+    """Neutralise spreadsheet formulas: a cell starting with = + - @ (or a tab/CR) is prefixed with an apostrophe."""
+    if isinstance(value, str) and value[:1] in ('=', '+', '-', '@', '\t', '\r'):
+        return "'" + value
+    return value
 
 
 class AuditLogListView(generics.ListAPIView):
@@ -371,6 +500,16 @@ class AuditLogListView(generics.ListAPIView):
         name = details.get('name', '')
         username = details.get('username', '')
         user_display = log.user.first_name or log.user.username if log.user else 'Unknown'
+
+        if action == 'login' and details.get('success') is False:
+            return f"Failed login attempt for '{username}'"
+        if details.get('action') in ('admin_update', 'admin_create', 'admin_delete'):
+            verb = {'admin_update': 'updated', 'admin_create': 'created', 'admin_delete': 'deleted'}[details['action']]
+            return f"{user_display} {verb} user '{details.get('target', '')}'"
+        if resource == 'settings':
+            return f"{user_display} changed system settings"
+        if resource == 'audit_logs':
+            return f"{user_display} {'exported' if action == 'read' else 'cleared'} audit logs"
 
         if action == 'login':
             return f"{user_display} logged in"
@@ -403,6 +542,8 @@ class AuditLogListView(generics.ListAPIView):
             sub_action = details.get('action', '')
             if sub_action == 'password_change':
                 return f"{user_display} changed their password"
+            if sub_action == 'password_reset':
+                return f"{user_display} reset their password"
             return f"{user_display} updated their profile"
         elif resource == 'course':
             course_name = details.get('name', details.get('course_name', ''))
@@ -418,6 +559,8 @@ class AuditLogListView(generics.ListAPIView):
         return f"{user_display} {action}d {resource}" + (f" (ID: {log.resource_id})" if log.resource_id else "")
 
     def _get_log_type(self, log):
+        if (log.details or {}).get('success') is False:
+            return 'warning'
         if log.action in ['delete', 'unshare']:
             return 'warning'
         elif log.action in ['create', 'share']:
@@ -443,22 +586,34 @@ class AuditLogListView(generics.ListAPIView):
         # Filter by user
         user_id = request.query_params.get('user_id')
         if user_id:
-            queryset = queryset.filter(user_id=user_id)
+            try:
+                queryset = queryset.filter(user_id=int(user_id))
+            except (TypeError, ValueError):
+                return Response({'error': 'user_id must be a number'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Limit
-        limit = int(request.query_params.get('limit', 50))
-        queryset = queryset[:limit]
+        queryset = queryset[:_clamp_limit(request, 50)]
 
         data = [self._serialize_log(log) for log in queryset]
         return Response(data)
 
     def delete(self, request):
-        """Delete all audit logs (Admin only)."""
-        count = AuditLog.objects.count()
-        AuditLog.objects.all().delete()
+        """Delete audit logs older than a minimum age (Admin only). Recent entries can never be erased from here, so
+        an attacker holding an admin token cannot wipe the evidence of what they just did."""
+        minimum = max(1, int(django_settings.AUDIT_LOG_CLEAR_MIN_AGE_DAYS))
+        try:
+            days = int(request.query_params.get('older_than_days', minimum))
+        except (TypeError, ValueError):
+            days = minimum
+        days = max(days, minimum)
+        cutoff = timezone.now() - timedelta(days=days)
+        old_logs = AuditLog.objects.filter(created_at__lt=cutoff)
+        count = old_logs.count()
+        old_logs.delete()
         # Log the deletion itself
-        log_action(request.user, 'delete', 'audit_logs', None, {'deleted_count': count}, request)
-        return Response({'message': f'{count} audit log(s) deleted', 'deleted_count': count})
+        log_action(request.user, 'delete', 'audit_logs', None,
+                   {'deleted_count': count, 'older_than_days': days}, request)
+        return Response({'message': f'{count} audit log(s) older than {days} days deleted', 'deleted_count': count,
+                         'older_than_days': days})
 
 
 class AuditLogExportView(APIView):
@@ -466,15 +621,10 @@ class AuditLogExportView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        import csv as csv_module
-        from django.http import HttpResponse
-
         queryset = AuditLog.objects.select_related('user').order_by('-created_at')
+        queryset = queryset[:_clamp_limit(request, 1000)]
 
-        limit = int(request.query_params.get('limit', 1000))
-        queryset = queryset[:limit]
-
-        response = HttpResponse(content_type='text/csv')
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = 'attachment; filename="audit_logs.csv"'
 
         writer = csv_module.writer(response)
@@ -482,7 +632,7 @@ class AuditLogExportView(APIView):
 
         for log in queryset:
             user_display = f"{log.user.first_name} {log.user.last_name}".strip() if log.user else 'Unknown'
-            writer.writerow([
+            writer.writerow([_csv_cell(cell) for cell in [
                 log.id,
                 log.action,
                 log.resource_type,
@@ -491,8 +641,9 @@ class AuditLogExportView(APIView):
                 log.ip_address or '',
                 json.dumps(log.details) if log.details else '',
                 log.created_at.isoformat(),
-            ])
+            ]])
 
+        log_action(request.user, 'read', 'audit_logs', None, {'action': 'export'}, request)
         return response
 
 
@@ -501,6 +652,7 @@ class GuestLoginView(APIView):
     Create a temporary guest account and return JWT tokens.
     """
     permission_classes = [permissions.AllowAny]
+    throttle_classes = with_defaults(GuestCreateThrottle)
 
     def post(self, request):
         username = f"guest_{uuid4().hex[:8]}"
@@ -517,14 +669,9 @@ class GuestLoginView(APIView):
 
         user.save()
 
-        refresh = RefreshToken.for_user(user)
-
         return Response({
-            'user': UserSerializer(user).data,
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            },
+            'user': UserSerializer(user, context={'request': request}).data,
+            'tokens': _token_payload(user),
             'message': 'Guest account created'
         }, status=status.HTTP_201_CREATED)
 
@@ -553,49 +700,44 @@ class ConvertGuestView(APIView):
         user.is_guest = False
         user.guest_expires_at = None
         user.save()
-
-        # Generate new tokens for the converted account
-        refresh = RefreshToken.for_user(user)
+        blacklist_user_tokens(user)
 
         return Response({
-            'user': UserSerializer(user).data,
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            },
+            'user': UserSerializer(user, context={'request': request}).data,
+            'tokens': _token_payload(user),
             'message': 'Account converted successfully'
         }, status=status.HTTP_200_OK)
 
 
 class VerifyEmailView(APIView):
-    """Verify a user's email address using the token sent to their email."""
+    """Verify a user's email address using the token sent to their email. A token works once and expires."""
     permission_classes = [permissions.AllowAny]
+    throttle_classes = with_defaults(VerifyEmailThrottle)
 
     def post(self, request):
-        token = request.data.get('token', '').strip()
+        token = request.data.get('token', '') if isinstance(request.data, dict) else ''
+        token = token.strip() if isinstance(token, str) else ''
         if not token:
             return Response({'error': 'Verification token is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            user = User.objects.get(email_verification_token=token)
-        except User.DoesNotExist:
-            return Response({'error': 'Invalid or expired verification link.'}, status=status.HTTP_400_BAD_REQUEST)
+        user = User.objects.filter(email_verification_token=token, is_active=True).first()
+        invalid = Response({'error': 'Invalid or expired verification link.'}, status=status.HTTP_400_BAD_REQUEST)
+        if user is None:
+            return invalid
+        sent_at = user.email_verification_sent_at
+        if sent_at is None or timezone.now() - sent_at > timedelta(days=EMAIL_VERIFICATION_MAX_AGE_DAYS):
+            return invalid
 
         user.email_verified = True
         user.email_verification_token = None
-        user.save(update_fields=['email_verified', 'email_verification_token'])
-
-        # Generate JWT tokens so user is logged in after verification
-        refresh = RefreshToken.for_user(user)
+        user.email_verification_sent_at = None
+        user.save(update_fields=['email_verified', 'email_verification_token', 'email_verification_sent_at'])
 
         log_action(user, 'update', 'user', user.id, {'action': 'email_verified'}, request)
 
         return Response({
-            'user': UserSerializer(user).data,
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            },
+            'user': UserSerializer(user, context={'request': request}).data,
+            'tokens': _token_payload(user),
             'message': 'Email verified successfully.'
         })
 
@@ -603,27 +745,23 @@ class VerifyEmailView(APIView):
 class ResendVerificationView(APIView):
     """Resend the verification email."""
     permission_classes = [permissions.AllowAny]
+    throttle_classes = with_defaults(ResendVerificationThrottle)
+
+    GENERIC = {'message': 'If an account exists with this email, a verification link has been sent.'}
 
     def post(self, request):
-        email = request.data.get('email', '').strip()
+        email = request.data.get('email', '') if isinstance(request.data, dict) else ''
+        email = email.strip() if isinstance(email, str) else ''
         if not email:
             return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            # Don't reveal whether email exists
-            return Response({'message': 'If an account exists with this email, a verification link has been sent.'})
+        user = User.objects.filter(email__iexact=email, is_active=True, email_verified=False).first()
+        if user is not None:
+            _issue_verification_token(user)
+            send_verification_email(user)
 
-        if user.email_verified:
-            return Response({'message': 'Email is already verified.'})
-
-        # Regenerate token and resend
-        user.email_verification_token = uuid4().hex
-        user.save(update_fields=['email_verification_token'])
-        send_verification_email(user)
-
-        return Response({'message': 'If an account exists with this email, a verification link has been sent.'})
+        # Same answer whether or not the address exists or is already verified
+        return Response(self.GENERIC)
 
 
 class DataExportView(APIView):
@@ -670,6 +808,8 @@ class AccountDeleteView(APIView):
         user = request.user
         user.is_active = False
         user.save()
+        blacklist_user_tokens(user)
+        log_action(user, 'delete', 'user', user.id, {'action': 'self_deactivate'}, request)
         return Response({'message': 'Account deactivated successfully'})
 
 
@@ -803,7 +943,8 @@ class GuestCleanupView(APIView):
 class BulkStudentImportView(APIView):
     """
     Bulk import students from CSV or XLSX file.
-    Creates user accounts, enrolls in course, sends welcome emails via MailHog.
+    Creates user accounts, enrolls in course, and emails each new account a one-time link to set its password.
+    A lecturer can only import into a course they teach.
     """
     permission_classes = [IsLecturerOrAdmin]
 
@@ -811,12 +952,27 @@ class BulkStudentImportView(APIView):
         file = request.FILES.get('file')
         if not file:
             return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
+        if file.size > django_settings.BULK_IMPORT_MAX_BYTES:
+            return Response({'error': 'The import file is too large.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        course = None
         course_id = request.data.get('course_id')
-        send_emails = request.data.get('send_emails', 'true').lower() != 'false'
+        if course_id not in (None, '', 'null'):
+            from apps.courses.models import Course
+            try:
+                course = Course.objects.filter(id=int(course_id)).first()
+            except (TypeError, ValueError):
+                course = None
+            if course is None:
+                return Response({'error': 'Course not found'}, status=status.HTTP_404_NOT_FOUND)
+            if course.instructor_id != request.user.id and request.user.role != 'admin':
+                return Response({'error': 'You can only import students into your own courses.'},
+                                status=status.HTTP_403_FORBIDDEN)
+
+        send_emails = str(request.data.get('send_emails', 'true')).lower() != 'false'
 
         # Parse file based on extension
-        filename = file.name.lower()
+        filename = (file.name or '').lower()
         try:
             content = file.read()
             if filename.endswith('.csv'):
@@ -828,9 +984,12 @@ class BulkStudentImportView(APIView):
                     {'error': 'Unsupported file format. Use CSV or XLSX.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-        except Exception as e:
+        except BulkImportError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            logger.warning('Bulk import file could not be parsed', exc_info=False)
             return Response(
-                {'error': f'Failed to parse file: {str(e)}'},
+                {'error': 'Failed to parse file. Check that it is a valid CSV or XLSX file.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -846,9 +1005,10 @@ class BulkStudentImportView(APIView):
         # Process import
         results = process_bulk_import(
             valid_rows,
-            course_id=course_id,
+            course=course,
             send_emails=send_emails,
             created_by=request.user,
+            reveal_existing=request.user.role == 'admin',
         )
 
         if isinstance(results, dict) and results.get('success') is False:

@@ -10,5 +10,6 @@ urlpatterns = [
     path('large-files/', views.LargeFilesView.as_view(), name='large-files'),
     path('user-storage/', views.UserStorageBreakdownView.as_view(), name='user-storage'),
     path('admin-delete/<int:pk>/', views.AdminFileDeleteView.as_view(), name='admin-file-delete'),
+    path('resolve/', views.ResolveMediaView.as_view(), name='resolve-media'),
     path('', include(router.urls)),
 ]
