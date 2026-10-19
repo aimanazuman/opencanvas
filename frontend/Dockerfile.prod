@@ -1,28 +1,41 @@
-# Stage 1: Build
-FROM node:18-alpine AS build
+# Production image for the React frontend: build with Node, serve the static files with an unprivileged nginx.
+# Base tags are pinned to exact versions; bump them on purpose and rebuild.
+
+# ---- Stage 1: build ------------------------------------------------------------------------------------------
+FROM node:22.23.3-alpine AS build
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 
 COPY . .
 
-# Build arg for API URL (passed from docker-compose)
+# API address baked into the bundle at build time (passed by docker-compose.prod.yml). Same origin: https://<DOMAIN>/api
 ARG REACT_APP_API_URL
 ENV REACT_APP_API_URL=$REACT_APP_API_URL
 
+# INLINE_RUNTIME_CHUNK=false: do not paste the webpack runtime into index.html as an inline script, so the
+# Content-Security-Policy (script-src 'self') can forbid inline scripts.
+# GENERATE_SOURCEMAP=false: do not publish the source code of the app.
+ENV INLINE_RUNTIME_CHUNK=false \
+    GENERATE_SOURCEMAP=false
+
 RUN npm run build
 
-# Stage 2: Serve with nginx
-FROM nginx:alpine
+# ---- Stage 2: serve (nginx as uid 101, listens on 8080, no root, no Linux capabilities needed) --------------------
+FROM nginxinc/nginx-unprivileged:1.30.6-alpine
 
-# Copy built files
 COPY --from=build /app/build /usr/share/nginx/html
-
-# Custom nginx config for SPA routing
+COPY nginx-security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+# The image already runs as uid 101 (nginx); say so explicitly.
+USER 101
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

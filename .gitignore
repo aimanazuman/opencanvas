@@ -31,9 +31,14 @@ build/
 .env.*
 !.env.example
 !.env.prod.example
+!.env.dev.example
 secrets/
+**/secrets/
 *.key
 *.pem
+*.crt
+*.p12
+acme.json
 
 # IDE
 .vscode/

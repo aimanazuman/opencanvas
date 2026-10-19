@@ -1,25 +1,64 @@
-FROM python:3.11-slim
+# Production image for the Django backend.
+#
+# Two stages: the builder has the compilers and turns requirements.txt into wheels; the runtime stage installs only
+# those wheels plus the small MariaDB/MySQL client library, so no compiler ends up in the image that runs.
+# The base tag is pinned to an exact patch release; bump it on purpose (and rebuild) when you want an update.
+
+# ---- Stage 1: build wheels ------------------------------------------------------------------------------------
+FROM python:3.11.17-slim-trixie AS builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential pkg-config default-libmysqlclient-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY requirements.txt .
+RUN pip wheel --wheel-dir /wheels -r requirements.txt
+
+# ---- Stage 2: runtime ------------------------------------------------------------------------------------------
+FROM python:3.11.17-slim-trixie
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Only the client runtime library (no headers, no compiler).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libmariadb3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Fixed uid/gid 10001. No home directory, no login shell. The host folders media/ and static/ must be owned by 10001
+# (docs/DEPLOYMENT.md).
+RUN groupadd --gid 10001 opencanvas \
+    && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin opencanvas
 
 WORKDIR /app
 
-# Install system deps for mysqlclient
-RUN apt-get update && apt-get install -y \
-    default-libmysqlclient-dev \
-    build-essential \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt gunicorn==21.2.0
+RUN --mount=type=bind,from=builder,source=/wheels,target=/wheels \
+    pip install --no-index --find-links /wheels -r requirements.txt \
+    && rm requirements.txt
 
+# The code stays owned by root and is read-only for the app user. Only the two data folders belong to the app user.
 COPY . .
+RUN python -m compileall -q /app \
+    && mkdir -p /app/media /app/staticfiles \
+    && chown 10001:10001 /app/media /app/staticfiles
+COPY entrypoint.prod.sh /entrypoint.sh
+RUN chmod 755 /entrypoint.sh
 
-# Collect static files
-RUN python manage.py collectstatic --noinput 2>/dev/null || true
+USER 10001:10001
 
 EXPOSE 8000
 
-# entrypoint reads secrets from files → env vars, runs migrations, starts gunicorn
-COPY entrypoint.prod.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Reached over loopback from inside the container. The Host header is "localhost", so ALLOWED_HOSTS must contain it
+# (docker-compose.prod.yml does that). X-Forwarded-Proto is sent so a future HTTPS redirect does not break the check.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD ["python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/api/health/', headers={'Host': 'localhost', 'X-Forwarded-Proto': 'https'}), timeout=4)"]
+
+# The entrypoint migrates, collects static files and then execs gunicorn (all as the non-root user).
 ENTRYPOINT ["/entrypoint.sh"]

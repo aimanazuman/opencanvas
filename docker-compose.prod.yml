@@ -1,133 +1,274 @@
-# docker-compose.prod.yml
-# Usage:
-#   1. Copy .env.prod.example to .env.prod and fill in your values
-#   2. docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+# OpenCanvas production stack, for a VPS that ALREADY runs a shared Traefik (external Docker network "proxy",
+# entrypoints web and websecure, certificate resolver letsencrypt). This file does not start a Traefik of its own and
+# publishes no ports. People who have no Traefik yet: add the overlay docker-compose.traefik.yml (see docs/DEPLOYMENT.md).
+#
+# Usage (details and first-time steps: docs/DEPLOYMENT.md):
+#   cp .env.prod.example .env.prod        (fill in the non-secret values; the secrets are files in ~/secrets)
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#
+# Networks:
+#   proxy  external, shared with the other apps on the VPS. ONLY oc-frontend and oc-backend join it, so Traefik can
+#          reach them (and the backend can reach the internet for email). The database is never on it.
+#   data   private and "internal" (no route to the outside): oc-db <-> oc-backend only.
+#
+# Names: every service, container and router is prefixed oc- / opencanvas- because other apps share the proxy
+# network and Docker resolves a service name as a DNS name on every network it joins. Do not rename them back to
+# generic names such as backend, frontend or db.
+name: opencanvas
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  logging: *logging
 
 services:
-  # Reverse Proxy + TLS
-  traefik:
-    image: traefik:v3.6.10
+  # ---- MySQL (private) ------------------------------------------------------------------------------------------
+  oc-db:
+    <<: *hardening
+    image: mysql:8.4.9
+    container_name: oc-db
+    # Run as the mysql user from the start (uid 999). The data folder /srv/opencanvas/mysql must be owned by 999:999.
+    # Because the container never starts as root, no capabilities are needed at all.
+    user: "999:999"
     command:
-      - "--api.dashboard=false"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - letsencrypt:/letsencrypt
-    restart: unless-stopped
-    networks:
-      - web
-
-  # MySQL Database
-  db:
-    image: mysql:8.0
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4
+      - --character-set-server=utf8mb4
+      - --skip-name-resolve
+      - --local-infile=0
+      - --mysqlx=OFF
+      - --performance-schema=OFF
+      - --innodb-buffer-pool-size=128M
+      - --max-connections=60
     environment:
-      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
       MYSQL_DATABASE: opencanvas_db
+      # root may log in only from inside this container (socket), never over the network.
+      MYSQL_ROOT_HOST: localhost
     secrets:
-      - db_password
+      - source: oc_db_root_password
+        target: db_root_password
+      - source: oc_db_app_password
+        target: db_app_password
     volumes:
-      - /var/data/opencanvas/mysql:/var/lib/mysql
-    restart: unless-stopped
+      - ${OPENCANVAS_DATA_DIR:-/srv/opencanvas}/mysql:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /var/run/mysqld:size=8m,uid=999,gid=999,mode=0755
     networks:
-      - internal
+      - data
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 300
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "mysqladmin ping --silent -h 127.0.0.1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 40s
 
-  # Django Backend
-  backend:
+  # ---- Django API (private network + proxy) ---------------------------------------------------------------------
+  oc-backend:
+    <<: *hardening
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    secrets:
-      - db_password
-      - django_secret_key
-      - smtp_password
+    image: opencanvas-backend:prod
+    container_name: oc-backend
     environment:
-      - DEBUG=False
-      - ALLOWED_HOSTS=${DOMAIN},backend
-      - DB_NAME=opencanvas_db
-      - DB_USER=root
-      - DB_PASSWORD_FILE=/run/secrets/db_password
-      - DB_HOST=db
-      - DB_PORT=3306
-      - SECRET_KEY_FILE=/run/secrets/django_secret_key
-      - CORS_ALLOWED_ORIGINS=https://${DOMAIN}
-      - FRONTEND_URL=https://${DOMAIN}
-      - EMAIL_HOST=smtp.gmail.com
-      - EMAIL_PORT=587
-      - EMAIL_USE_TLS=True
-      - EMAIL_HOST_USER=${SMTP_USER}
-      - EMAIL_HOST_PASSWORD_FILE=/run/secrets/smtp_password
-      - DEFAULT_FROM_EMAIL=OpenCanvas <${SMTP_USER}>
+      DEBUG: "False"
+      # "localhost" is needed by the container healthcheck (loopback request).
+      ALLOWED_HOSTS: ${DOMAIN:?set DOMAIN in .env.prod},oc-backend,localhost
+      DB_NAME: opencanvas_db
+      DB_USER: opencanvas_app
+      DB_PASSWORD_FILE: /run/secrets/db_app_password
+      DB_HOST: oc-db
+      DB_PORT: "3306"
+      SECRET_KEY_FILE: /run/secrets/django_secret_key
+      CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+      FRONTEND_URL: https://${DOMAIN}
+      EMAIL_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      EMAIL_PORT: ${SMTP_PORT:-587}
+      EMAIL_USE_TLS: "True"
+      EMAIL_HOST_USER: ${SMTP_USER:?set SMTP_USER in .env.prod}
+      EMAIL_HOST_PASSWORD_FILE: /run/secrets/smtp_password
+      DEFAULT_FROM_EMAIL: OpenCanvas <${SMTP_USER}>
+      CSRF_TRUSTED_ORIGINS: https://${DOMAIN}
+      # Traefik rewrites X-Forwarded-Proto, so Django may trust it (one trusted proxy hop = Traefik).
+      BEHIND_PROXY: "True"
+      TRUSTED_PROXY_COUNT: ${TRUSTED_PROXY_COUNT:-1}
+      # Set to True only when the origin cannot be reached except through Cloudflare (docs/DEPLOYMENT.md, "Client address").
+      TRUST_CLOUDFLARE_HEADER: ${TRUST_CLOUDFLARE_HEADER:-False}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+      GUNICORN_FORWARDED_ALLOW_IPS: ${GUNICORN_FORWARDED_ALLOW_IPS:-172.16.0.0/12}
+    secrets:
+      - source: oc_db_app_password
+        target: db_app_password
+      - source: oc_django_secret_key
+        target: django_secret_key
+      - source: oc_smtp_password
+        target: smtp_password
     volumes:
-      - /var/data/opencanvas/media:/app/media
-      - /var/data/opencanvas/static:/app/staticfiles
+      - ${OPENCANVAS_DATA_DIR:-/srv/opencanvas}/media:/app/media
+      - ${OPENCANVAS_DATA_DIR:-/srv/opencanvas}/static:/app/staticfiles
+    tmpfs:
+      - /tmp:size=128m,mode=1777
     depends_on:
-      db:
+      oc-db:
         condition: service_healthy
-    restart: unless-stopped
     networks:
-      - web
-      - internal
+      - data
+      - proxy
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 200
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/api/health/', headers={'Host': 'localhost', 'X-Forwarded-Proto': 'https'}), timeout=4)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.backend.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/admin`) || PathPrefix(`/media`))"
-      - "traefik.http.routers.backend.entrypoints=websecure"
-      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.backend.loadbalancer.server.port=8000"
-      - "traefik.http.routers.backend.priority=100"
-      - "traefik.docker.network=opencanvas_web"
+      - traefik.enable=true
+      - traefik.docker.network=proxy
 
-  # React Frontend
-  frontend:
+      # Security headers for API and admin answers (HSTS lives here, nginx does not set it).
+      - traefik.http.middlewares.opencanvas-sec-api.headers.stsSeconds=31536000
+      - traefik.http.middlewares.opencanvas-sec-api.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.opencanvas-sec-api.headers.forceSTSHeader=true
+      - traefik.http.middlewares.opencanvas-sec-api.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.opencanvas-sec-api.headers.customFrameOptionsValue=SAMEORIGIN
+      - traefik.http.middlewares.opencanvas-sec-api.headers.referrerPolicy=strict-origin-when-cross-origin
+
+      # Rate limits per visitor. The site is behind Cloudflare, so the visitor is identified by the CF-Connecting-IP header.
+      # opencanvas-rl: normal API calls. opencanvas-rl-auth: sign-in, registration, password reset (stricter).
+      # opencanvas-rl-media: file downloads (a page can load many images at once).
+      - traefik.http.middlewares.opencanvas-rl.ratelimit.average=${OPENCANVAS_RL_AVERAGE:-20}
+      - traefik.http.middlewares.opencanvas-rl.ratelimit.burst=${OPENCANVAS_RL_BURST:-50}
+      - traefik.http.middlewares.opencanvas-rl.ratelimit.period=1s
+      - traefik.http.middlewares.opencanvas-rl.ratelimit.sourcecriterion.requestheadername=CF-Connecting-IP
+      - traefik.http.middlewares.opencanvas-rl-auth.ratelimit.average=${OPENCANVAS_RL_AUTH_AVERAGE:-5}
+      - traefik.http.middlewares.opencanvas-rl-auth.ratelimit.burst=${OPENCANVAS_RL_AUTH_BURST:-10}
+      - traefik.http.middlewares.opencanvas-rl-auth.ratelimit.period=1s
+      - traefik.http.middlewares.opencanvas-rl-auth.ratelimit.sourcecriterion.requestheadername=CF-Connecting-IP
+      - traefik.http.middlewares.opencanvas-rl-media.ratelimit.average=50
+      - traefik.http.middlewares.opencanvas-rl-media.ratelimit.burst=100
+      - traefik.http.middlewares.opencanvas-rl-media.ratelimit.period=1s
+      - traefik.http.middlewares.opencanvas-rl-media.ratelimit.sourcecriterion.requestheadername=CF-Connecting-IP
+
+      # Django admin: closed to everyone except the addresses in OPENCANVAS_ADMIN_ALLOWED_IPS (default 127.0.0.1/32 means
+      # nobody). depth=1 takes the visitor address that Cloudflare put at the end of X-Forwarded-For; if the shared
+      # Traefik does not trust Cloudflare's forwarded headers, nobody matches and the admin stays closed (safe failure).
+      - traefik.http.middlewares.opencanvas-admin-ips.ipallowlist.sourcerange=${OPENCANVAS_ADMIN_ALLOWED_IPS:-127.0.0.1/32}
+      - traefik.http.middlewares.opencanvas-admin-ips.ipallowlist.ipstrategy.depth=1
+
+      # Router 1: sign-in, token, registration, password reset (strict limit). Highest priority.
+      - traefik.http.routers.opencanvas-auth.rule=Host(`${DOMAIN}`) && (PathPrefix(`/api/token`) || PathPrefix(`/api/accounts/login`) || PathPrefix(`/api/accounts/register`) || PathPrefix(`/api/accounts/guest`) || PathPrefix(`/api/accounts/convert-guest`) || PathPrefix(`/api/accounts/password`) || PathPrefix(`/api/accounts/resend-verification`) || PathPrefix(`/api/accounts/verify-email`))
+      - traefik.http.routers.opencanvas-auth.priority=200
+      - traefik.http.routers.opencanvas-auth.entrypoints=websecure
+      - traefik.http.routers.opencanvas-auth.tls.certresolver=letsencrypt
+      - traefik.http.routers.opencanvas-auth.middlewares=opencanvas-sec-api,opencanvas-rl-auth
+      - traefik.http.routers.opencanvas-auth.service=opencanvas-backend
+
+      # Router 2: Django admin, allow-list plus the strict limit.
+      - traefik.http.routers.opencanvas-admin.rule=Host(`${DOMAIN}`) && PathPrefix(`/admin`)
+      - traefik.http.routers.opencanvas-admin.priority=150
+      - traefik.http.routers.opencanvas-admin.entrypoints=websecure
+      - traefik.http.routers.opencanvas-admin.tls.certresolver=letsencrypt
+      - traefik.http.routers.opencanvas-admin.middlewares=opencanvas-admin-ips,opencanvas-sec-api,opencanvas-rl-auth
+      - traefik.http.routers.opencanvas-admin.service=opencanvas-backend
+
+      # Router 3: the rest of the API.
+      - traefik.http.routers.opencanvas-backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)
+      - traefik.http.routers.opencanvas-backend.priority=100
+      - traefik.http.routers.opencanvas-backend.entrypoints=websecure
+      - traefik.http.routers.opencanvas-backend.tls.certresolver=letsencrypt
+      - traefik.http.routers.opencanvas-backend.middlewares=opencanvas-sec-api,opencanvas-rl
+      - traefik.http.routers.opencanvas-backend.service=opencanvas-backend
+
+      # Router 4: uploaded files.
+      - traefik.http.routers.opencanvas-media.rule=Host(`${DOMAIN}`) && PathPrefix(`/media`)
+      - traefik.http.routers.opencanvas-media.priority=100
+      - traefik.http.routers.opencanvas-media.entrypoints=websecure
+      - traefik.http.routers.opencanvas-media.tls.certresolver=letsencrypt
+      - traefik.http.routers.opencanvas-media.middlewares=opencanvas-sec-api,opencanvas-rl-media
+      - traefik.http.routers.opencanvas-media.service=opencanvas-backend
+
+      - traefik.http.services.opencanvas-backend.loadbalancer.server.port=8000
+
+  # ---- React frontend served by unprivileged nginx (proxy only) ---------------------------------------------------
+  oc-frontend:
+    <<: *hardening
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
       args:
-        - REACT_APP_API_URL=https://${DOMAIN}/api
-    restart: unless-stopped
+        REACT_APP_API_URL: https://${DOMAIN:?set DOMAIN in .env.prod}/api
+    image: opencanvas-frontend:prod
+    container_name: oc-frontend
+    volumes:
+      # Django admin CSS/JS (collected by the backend). Read-only.
+      - ${OPENCANVAS_DATA_DIR:-/srv/opencanvas}/static:/srv/django-static:ro
+    tmpfs:
+      - /tmp:size=32m,mode=1777
     networks:
-      - web
+      - proxy
+    mem_limit: 64m
+    cpus: 0.5
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.frontend.entrypoints=websecure"
-      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.frontend.loadbalancer.server.port=80"
-      - "traefik.http.routers.frontend.priority=1"
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.middlewares.opencanvas-sec.headers.stsSeconds=31536000
+      - traefik.http.middlewares.opencanvas-sec.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.opencanvas-sec.headers.forceSTSHeader=true
+      - traefik.http.middlewares.opencanvas-sec.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.opencanvas-sec.headers.customFrameOptionsValue=SAMEORIGIN
+      - traefik.http.middlewares.opencanvas-sec.headers.referrerPolicy=strict-origin-when-cross-origin
+      - traefik.http.routers.opencanvas-frontend.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.opencanvas-frontend.priority=1
+      - traefik.http.routers.opencanvas-frontend.entrypoints=websecure
+      - traefik.http.routers.opencanvas-frontend.tls.certresolver=letsencrypt
+      - traefik.http.routers.opencanvas-frontend.middlewares=opencanvas-sec
+      - traefik.http.routers.opencanvas-frontend.service=opencanvas-frontend
+      - traefik.http.services.opencanvas-frontend.loadbalancer.server.port=8080
 
-# Secrets
+# Secret files, kept OUTSIDE the repository (default ~/secrets, set SECRETS_DIR in .env.prod to move them).
+# Nothing here is a value; each entry is only the path of a file. docs/DEPLOYMENT.md says how to create them.
 secrets:
-  db_password:
-    file: ~/secrets/db_password.txt
-  django_secret_key:
-    file: ~/secrets/django_secret_key.txt
-  smtp_password:
-    file: ~/secrets/smtp_password.txt
+  oc_db_root_password:
+    file: ${SECRETS_DIR:-${HOME}/secrets}/db_password.txt
+  oc_db_app_password:
+    file: ${SECRETS_DIR:-${HOME}/secrets}/db_app_password.txt
+  oc_django_secret_key:
+    file: ${SECRETS_DIR:-${HOME}/secrets}/django_secret_key.txt
+  oc_smtp_password:
+    file: ${SECRETS_DIR:-${HOME}/secrets}/smtp_password.txt
 
-# Volumes
-volumes:
-  letsencrypt:
-
-# Networks
 networks:
-  web:
-    driver: bridge
-  internal:
-    driver: bridge
+  # The shared Traefik network. Created once by the Traefik stack (or by hand: docker network create proxy).
+  proxy:
+    external: true
+  # Private, no route to the outside.
+  data:
+    internal: true

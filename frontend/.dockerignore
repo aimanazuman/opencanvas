@@ -1,0 +1,30 @@
+# Keep dependencies, build output, secrets and version control out of the build context and the image.
+node_modules
+**/node_modules
+build
+coverage
+.git
+.gitignore
+.gitattributes
+
+# Environment files and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+secrets
+*.pem
+*.key
+*.crt
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+Dockerfile*
+.dockerignore

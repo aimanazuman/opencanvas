@@ -1,4 +1,28 @@
+# DEVELOPMENT stack (your PC). Not for production: see docker-compose.prod.yml and docs/DEPLOYMENT.md.
+#
+# Every published port is bound to 127.0.0.1, so nothing here is reachable from other machines on your network.
+#
+# The values below marked DEV ONLY are throwaway values for a database that holds no real data. They are not secrets and
+# must never be reused anywhere else. To use your own, copy .env.dev.example to .env.dev and run
+#   docker compose --env-file .env.dev up
 services:
+  db:
+    image: mysql:8.4.9
+    environment:
+      # DEV ONLY throwaway credentials.
+      MYSQL_ROOT_PASSWORD: ${OC_DEV_DB_ROOT_PASSWORD:-dev-only-root-not-a-secret}
+      MYSQL_DATABASE: opencanvas_db
+    volumes:
+      - dev_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping --silent -h 127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # Not published: the backend reaches it over the compose network. To use a desktop client, add
+    # "127.0.0.1:3307:3306" under ports.
+
   backend:
     build: ./backend
     command: >
@@ -7,21 +31,23 @@ services:
     volumes:
       - ./backend:/app
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
+      # DEV ONLY throwaway values (see the note at the top of this file).
       - DEBUG=True
-      - SECRET_KEY=django-insecure-dev-key-change-in-production
+      - SECRET_KEY=django-insecure-dev-only-never-use-in-production
       - DB_NAME=opencanvas_db
       - DB_USER=root
-      - DB_PASSWORD=letmein
-      - DB_HOST=host.docker.internal
+      - DB_PASSWORD=${OC_DEV_DB_ROOT_PASSWORD:-dev-only-root-not-a-secret}
+      - DB_HOST=db
       - DB_PORT=3306
       - EMAIL_HOST=mailhog
       - EMAIL_PORT=1025
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
-      - mailhog
+      db:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
 
   frontend:
     build: ./frontend
@@ -30,7 +56,7 @@ services:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - REACT_APP_API_URL=http://localhost:8000/api
       - WATCHPACK_POLLING=true
@@ -41,10 +67,11 @@ services:
     tty: true
 
   mailhog:
-    image: mailhog/mailhog
+    image: mailhog/mailhog:v1.0.1
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
 volumes:
   frontend_node_modules:
+  dev_db_data:

@@ -1,0 +1,51 @@
+# Keep secrets, uploaded files, caches and version control out of the build context and out of every image layer.
+.git
+.gitignore
+.gitattributes
+.github
+
+# Environment files and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+secrets
+**/secrets
+*.pem
+*.key
+*.crt
+*.p12
+
+# Runtime data (bind mounts in production)
+media
+staticfiles
+db.sqlite3
+*.sqlite3
+*.log
+
+# Python caches and virtual environments
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.coverage
+htmlcov
+venv
+.venv
+env
+
+# Editor and OS files
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Not needed at runtime
+Dockerfile*
+.dockerignore
+docs
+**/tests
+**/tests.py
+**/test_*.py

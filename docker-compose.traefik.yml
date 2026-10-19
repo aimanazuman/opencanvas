@@ -1,0 +1,60 @@
+# OPTIONAL overlay: runs a Traefik of its own, for people who clone this repository onto a server that has no Traefik.
+#
+# DO NOT USE THIS ON A VPS THAT ALREADY RUNS A SHARED TRAEFIK (such as the owner's). That Traefik already owns ports
+# 80 and 443 and the network "proxy"; a second one would fail to start or fight the first for the certificates.
+#
+# Prerequisite (once): docker network create proxy
+# Usage:
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml -f docker-compose.traefik.yml up -d --build
+# ACME_EMAIL must be set in .env.prod.
+#
+# SECURITY WARNING: Traefik discovers containers through the Docker API. The socket is mounted read-only, but a
+# read-only socket is still powerful (it can list every container and read their environment). Treat a compromise of
+# this container as a compromise of the host. For a more careful setup put a Docker socket proxy in between.
+# Behind Cloudflare, also add the Cloudflare address ranges as trusted forwarded-header sources
+# (--entrypoints.websecure.forwardedheaders.trustedips=...), or the admin allow-list cannot see visitor addresses.
+
+services:
+  traefik:
+    image: traefik:v3.6.10
+    container_name: oc-traefik
+    restart: unless-stopped
+    command:
+      - --api.dashboard=false
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=proxy
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?set ACME_EMAIL in .env.prod}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --log.level=INFO
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - oc_letsencrypt:/letsencrypt
+    networks:
+      - proxy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    mem_limit: 128m
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  oc_letsencrypt:
