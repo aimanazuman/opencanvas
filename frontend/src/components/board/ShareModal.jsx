@@ -114,7 +114,7 @@ export default function ShareModal({ isOpen, onClose, boardId, boardName }) {
         user: {
           id: targetUser.id,
           name: targetUser.username || `${targetUser.first_name} ${targetUser.last_name}`,
-          email: targetUser.email,
+          email: targetUser.email_hint || targetUser.email || '',
         },
         permission: selectedPermission,
       };
@@ -237,7 +237,7 @@ export default function ShareModal({ isOpen, onClose, boardId, boardName }) {
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search by name or email..."
+                      placeholder="Search by name or username (3+ letters)..."
                       className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
@@ -271,7 +271,7 @@ export default function ShareModal({ isOpen, onClose, boardId, boardName }) {
                               ? `${result.first_name} ${result.last_name}`
                               : result.username}
                           </p>
-                          <p className="text-xs text-gray-500 truncate">{result.email}</p>
+                          <p className="text-xs text-gray-500 truncate">{result.email_hint || result.email}</p>
                         </div>
                         <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded capitalize flex-shrink-0">{result.role}</span>
                       </button>

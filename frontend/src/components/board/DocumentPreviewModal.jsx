@@ -1,12 +1,48 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, ExternalLink, Download, FileText } from 'lucide-react';
 import { getPreviewType, getFileTypeInfo, formatFileSize } from '../../utils/fileIcons';
+import { safeDisplayUrl } from '../../utils/media';
 
-export default function DocumentPreviewModal({ fileUrl, fileName, fileSize, onClose }) {
-  if (!fileUrl) return null;
-
+export default function DocumentPreviewModal({ fileUrl: rawUrl, fileName, fileSize, onClose }) {
+  // fileUrl normally is a short-lived signed URL; anything that is not http(s)/blob is dropped
+  const fileUrl = safeDisplayUrl(rawUrl);
   const previewType = getPreviewType(fileName);
   const fileInfo = getFileTypeInfo(fileName);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [pdfFailed, setPdfFailed] = useState(false);
+
+  // The server sends uploads as downloads (never as web pages), so a PDF cannot be shown by pointing an iframe at it.
+  // Fetch it, wrap it as a PDF blob and show that instead: the browser's PDF viewer renders it, nothing can run.
+  useEffect(() => {
+    if (previewType !== 'pdf' || !fileUrl) return undefined;
+    if (fileUrl.startsWith('blob:')) {
+      setPdfUrl(fileUrl);
+      return undefined;
+    }
+    let cancelled = false;
+    let objectUrl = null;
+    setPdfUrl(null);
+    setPdfFailed(false);
+    fetch(fileUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error('download failed');
+        return res.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+        setPdfUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setPdfFailed(true);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [fileUrl, previewType]);
+
+  if (!fileUrl) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
@@ -19,7 +55,7 @@ export default function DocumentPreviewModal({ fileUrl, fileName, fileSize, onCl
               target="_blank"
               rel="noopener noreferrer"
               className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
-              title="Open in new tab"
+              title="Open / download"
             >
               <ExternalLink size={18} />
             </a>
@@ -32,12 +68,33 @@ export default function DocumentPreviewModal({ fileUrl, fileName, fileSize, onCl
           </div>
         </div>
         <div className="flex-1 bg-gray-100 overflow-auto">
-          {previewType === 'pdf' && (
+          {previewType === 'pdf' && pdfUrl && (
             <iframe
-              src={fileUrl}
+              src={pdfUrl}
               title={fileName || 'PDF Preview'}
               className="w-full h-full border-0"
             />
+          )}
+
+          {previewType === 'pdf' && !pdfUrl && !pdfFailed && (
+            <div className="flex items-center justify-center h-full text-sm text-gray-500">Loading preview...</div>
+          )}
+
+          {previewType === 'pdf' && pdfFailed && (
+            <div className="flex items-center justify-center h-full p-8">
+              <div className="text-center text-gray-500">
+                <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>The preview could not be loaded.</p>
+                <a
+                  href={fileUrl}
+                  download={fileName}
+                  className="inline-flex items-center space-x-2 mt-4 text-indigo-600 hover:underline"
+                >
+                  <Download size={16} />
+                  <span>Download instead</span>
+                </a>
+              </div>
+            </div>
           )}
 
           {previewType === 'image' && (

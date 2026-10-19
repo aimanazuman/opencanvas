@@ -37,8 +37,10 @@ api.interceptors.response.use(
       if (refreshToken) {
         try {
           const res = await axios.post(`${API_URL}/token/refresh/`, { refresh: refreshToken });
-          const { access } = res.data;
+          const { access, refresh } = res.data;
           localStorage.setItem('access_token', access);
+          // The server rotates refresh tokens (the old one is blacklisted), so the new one must be kept.
+          if (refresh) localStorage.setItem('refresh_token', refresh);
           originalRequest.headers.Authorization = `Bearer ${access}`;
           return api(originalRequest);
         } catch (refreshError) {

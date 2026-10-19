@@ -207,8 +207,11 @@ export const AuthProvider = ({ children }) => {
             axios.default.post(`${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/token/refresh/`, { refresh: existingGuestToken })
           );
           const newAccess = refreshRes.data.access;
+          // Refresh tokens rotate: keep the new one, the old one is now blacklisted
+          const newRefresh = refreshRes.data.refresh || existingGuestToken;
           localStorage.setItem('access_token', newAccess);
-          localStorage.setItem('refresh_token', existingGuestToken);
+          localStorage.setItem('refresh_token', newRefresh);
+          localStorage.setItem('guest_refresh_token', newRefresh);
 
           // Load the existing guest profile
           const profileRes = await authApi.getProfile();

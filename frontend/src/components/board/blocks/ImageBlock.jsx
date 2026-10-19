@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ImageIcon, Trash2, Upload, Loader2 } from 'lucide-react';
 import { uploadFile } from '../../../utils/fileUpload';
+import { useMediaUrl } from '../../../utils/media';
 
 export default function ImageBlock({ block, canEdit, onUpdate, onDelete }) {
   const [caption, setCaption] = useState(block.caption || '');
@@ -42,7 +43,20 @@ export default function ImageBlock({ block, canEdit, onUpdate, onDelete }) {
     onUpdate({ caption });
   };
 
-  const displaySrc = block.src;
+  // block.src is a blob: preview while uploading, otherwise a stored reference that is exchanged for a signed URL.
+  const resolvedSrc = useMediaUrl(block.src);
+  const displaySrc = block.src ? resolvedSrc : null;
+
+  if (block.src && !resolvedSrc) {
+    return (
+      <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center text-sm text-gray-400">
+        {resolvedSrc === undefined ? 'Loading image...' : 'This image is not available.'}
+        {canEdit && (
+          <button onClick={onDelete} className="ml-3 text-red-400 hover:underline" title="Remove block">Remove</button>
+        )}
+      </div>
+    );
+  }
 
   if (!displaySrc) {
     return (

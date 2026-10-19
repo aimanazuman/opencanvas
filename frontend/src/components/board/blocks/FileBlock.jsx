@@ -3,12 +3,14 @@ import { Download, Trash2, Upload, Eye, Loader2 } from 'lucide-react';
 import { getFileTypeInfo, isPreviewable } from '../../../utils/fileIcons';
 import DocumentPreviewModal from '../DocumentPreviewModal';
 import { uploadFile } from '../../../utils/fileUpload';
+import { useMediaUrl } from '../../../utils/media';
 
 export default function FileBlock({ block, canEdit, onUpdate, onDelete }) {
   const fileInputRef = useRef();
   const [showPreview, setShowPreview] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [localPreview, setLocalPreview] = useState(null);
+  const fileHref = useMediaUrl(block.fileUrl); // stored reference -> short-lived signed URL
 
   useEffect(() => {
     return () => {
@@ -97,7 +99,7 @@ export default function FileBlock({ block, canEdit, onUpdate, onDelete }) {
         </p>
       </div>
       <div className="flex space-x-1">
-        {canPreview && block.fileUrl && (
+        {canPreview && fileHref && (
           <button
             onClick={() => setShowPreview(true)}
             className="p-1.5 hover:bg-blue-50 rounded"
@@ -106,9 +108,9 @@ export default function FileBlock({ block, canEdit, onUpdate, onDelete }) {
             <Eye className="w-4 h-4 text-blue-500" />
           </button>
         )}
-        {block.fileUrl && (
+        {fileHref && (
           <a
-            href={block.fileUrl}
+            href={fileHref}
             download={block.fileName}
             className="p-1.5 hover:bg-gray-200 rounded"
             title="Download"
@@ -124,7 +126,7 @@ export default function FileBlock({ block, canEdit, onUpdate, onDelete }) {
       </div>
       {showPreview && (
         <DocumentPreviewModal
-          fileUrl={block.fileUrl}
+          fileUrl={fileHref}
           fileName={block.fileName}
           onClose={() => setShowPreview(false)}
         />

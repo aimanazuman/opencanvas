@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Music, Upload, Trash2, Loader2 } from 'lucide-react';
 import { uploadFile } from '../../../utils/fileUpload';
+import { useMediaUrl } from '../../../utils/media';
 
 export default function AudioBlock({ block, canEdit, onUpdate, onDelete }) {
   const [uploading, setUploading] = useState(false);
   const [localPreview, setLocalPreview] = useState(null);
   const fileInputRef = useRef(null);
+  const audioSrc = useMediaUrl(block.audioUrl); // stored reference -> short-lived signed URL
 
   useEffect(() => {
     return () => {
@@ -81,7 +83,7 @@ export default function AudioBlock({ block, canEdit, onUpdate, onDelete }) {
           </button>
         )}
       </div>
-      <audio controls className="w-full" src={block.audioUrl}>
+      <audio controls className="w-full" src={audioSrc || undefined}>
         Your browser does not support the audio element.
       </audio>
       {uploading && (

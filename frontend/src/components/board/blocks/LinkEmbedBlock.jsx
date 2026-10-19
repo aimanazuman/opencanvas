@@ -1,16 +1,36 @@
 import React, { useState } from 'react';
 import { Link2, ExternalLink, Trash2, Globe } from 'lucide-react';
+import { safeUrl, safeUrlWithDefaultScheme, EXTERNAL_IFRAME_SANDBOX } from '../../../utils/safeUrl';
 
 export default function LinkEmbedBlock({ block, canEdit, onUpdate, onDelete }) {
   const [urlInput, setUrlInput] = useState('');
 
   const handleSetUrl = () => {
     if (!urlInput.trim()) return;
-    let url = urlInput.trim();
-    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    const url = safeUrlWithDefaultScheme(urlInput);
+    if (!url) {
+      window.alert('Only http and https links can be embedded.');
+      return;
+    }
     onUpdate({ linkUrl: url, linkTitle: block.linkTitle || url });
     setUrlInput('');
   };
+
+  // Board content is written by users: never trust a stored link, check it again before it is rendered.
+  const linkHref = safeUrl(block.linkUrl);
+
+  if (block.linkUrl && !linkHref) {
+    return (
+      <div className="border border-red-200 rounded-lg p-4 bg-red-50 text-sm text-red-700 flex items-center justify-between">
+        <span>This link was blocked because it is not a normal web address.</span>
+        {canEdit && (
+          <button onClick={onDelete} className="p-1 text-gray-400 hover:text-red-500" title="Remove">
+            <Trash2 size={16} />
+          </button>
+        )}
+      </div>
+    );
+  }
 
   if (!block.linkUrl) {
     return (
@@ -65,7 +85,7 @@ export default function LinkEmbedBlock({ block, canEdit, onUpdate, onDelete }) {
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <a
-            href={block.linkUrl}
+            href={linkHref}
             target="_blank"
             rel="noopener noreferrer"
             className="p-1 text-cyan-500 hover:text-cyan-700"
@@ -82,19 +102,19 @@ export default function LinkEmbedBlock({ block, canEdit, onUpdate, onDelete }) {
       </div>
       {block.embed ? (
         <iframe
-          src={block.linkUrl}
+          src={linkHref}
           title={block.linkTitle || 'Embedded content'}
           className="w-full h-64 border-0"
-          sandbox="allow-scripts allow-same-origin allow-popups"
+          sandbox={EXTERNAL_IFRAME_SANDBOX}
         />
       ) : (
         <a
-          href={block.linkUrl}
+          href={linkHref}
           target="_blank"
           rel="noopener noreferrer"
           className="block px-4 py-3 text-sm text-cyan-700 hover:bg-cyan-100 truncate"
         >
-          {block.linkUrl}
+          {linkHref}
         </a>
       )}
       {canEdit && (

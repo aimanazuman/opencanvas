@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { safeUrl } from './safeUrl';
 
 export function generateId() {
   return uuidv4();
@@ -104,7 +105,8 @@ export function getVideoEmbedUrl(url) {
   if (vimeoMatch) {
     return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
   }
-  return url;
+  // Anything else must be a plain http(s) address; javascript:, data: and similar become empty
+  return safeUrl(url) || '';
 }
 
 export function getVideoThumbnail(url) {

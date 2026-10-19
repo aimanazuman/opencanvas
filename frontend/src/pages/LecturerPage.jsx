@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { openMailto } from '../utils/safeUrl';
 import {
   Layout, BookOpen, Users, Settings, Plus, Folder, FileText,
   ChevronDown, ChevronRight, BarChart, Trash2,
@@ -239,7 +240,7 @@ function LecturerPage({ onNavigate }) {
 
   const handleSearchStudentForAdd = async (query) => {
     setNewStudentQuery(query);
-    if (query.length < 2) {
+    if (query.length < 3) {
       setStudentSearchResults([]);
       return;
     }
@@ -715,7 +716,7 @@ function LecturerPage({ onNavigate }) {
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => student.email && window.open(`mailto:${student.email}`, '_blank')}
+                          onClick={() => openMailto(student.email)}
                           className="p-1 hover:bg-gray-100 rounded text-gray-600"
                           title="Email student"
                         >
@@ -1344,7 +1345,7 @@ function LecturerPage({ onNavigate }) {
                   value={newStudentQuery}
                   onChange={(e) => handleSearchStudentForAdd(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Search by name or email..."
+                  placeholder="Search by name or username (3+ letters)..."
                 />
                 {studentSearchResults.length > 0 && (
                   <div className="mt-2 border rounded-lg max-h-32 overflow-y-auto">
@@ -1359,7 +1360,7 @@ function LecturerPage({ onNavigate }) {
                         className={`w-full text-left px-3 py-2 hover:bg-indigo-50 text-sm ${selectedStudentId === u.id ? 'bg-indigo-50' : ''}`}
                       >
                         <span className="font-medium">{u.first_name} {u.last_name}</span>
-                        <span className="text-gray-500 ml-2">{u.email}</span>
+                        <span className="text-gray-500 ml-2">{u.email_hint || u.email}</span>
                       </button>
                     ))}
                   </div>
@@ -1480,7 +1481,7 @@ function LecturerPage({ onNavigate }) {
             </div>
             <div className="p-6 border-t flex gap-3">
               <button
-                onClick={() => { viewingStudent.email && window.open(`mailto:${viewingStudent.email}`, '_blank'); }}
+                onClick={() => openMailto(viewingStudent.email)}
                 className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center justify-center space-x-2"
               >
                 <Mail className="w-4 h-4" />

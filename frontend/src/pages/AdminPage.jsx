@@ -1502,9 +1502,9 @@ function AdminPage({ onNavigate }) {
                 <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
                   <Trash2 className="w-5 h-5 text-red-600" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900">Clear All Logs</h3>
+                <h3 className="text-lg font-bold text-gray-900">Clear Old Logs</h3>
               </div>
-              <p className="text-gray-600 mb-6">Are you sure you want to delete all audit logs? This action cannot be undone. Consider exporting logs first.</p>
+              <p className="text-gray-600 mb-6">Delete audit logs older than 30 days? This action cannot be undone. Recent entries are always kept. Consider exporting logs first.</p>
               <div className="flex space-x-3">
                 <button
                   onClick={() => setShowDeleteLogsModal(false)}
@@ -1526,7 +1526,7 @@ function AdminPage({ onNavigate }) {
                   disabled={deletingLogs}
                   className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium disabled:opacity-50"
                 >
-                  {deletingLogs ? 'Deleting...' : 'Delete All Logs'}
+                  {deletingLogs ? 'Deleting...' : 'Delete Old Logs'}
                 </button>
               </div>
             </div>

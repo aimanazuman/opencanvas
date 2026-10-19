@@ -1,4 +1,5 @@
 import React from 'react';
+import { MediaImg } from '../MediaFile';
 import { Paperclip, Link2, Heart, MessageCircle } from 'lucide-react';
 
 function isImageFile(file) {
@@ -19,12 +20,12 @@ export default function KanbanCard({ card, user, onClick }) {
     >
       {firstImage && (
         <div className="mb-2 rounded overflow-hidden -mx-1 -mt-1">
-          <img src={firstImage.dataUrl} alt="" className="w-full h-28 object-cover" />
+          <MediaImg src={firstImage.dataUrl} alt="" className="w-full h-28 object-cover" />
         </div>
       )}
       {!firstImage && card.imageUrl && (
         <div className="mb-2 rounded overflow-hidden -mx-1 -mt-1">
-          <img src={card.imageUrl} alt="" className="w-full h-28 object-cover" />
+          <MediaImg src={card.imageUrl} alt="" className="w-full h-28 object-cover" />
         </div>
       )}
       <p className="text-sm font-medium text-gray-900">{card.title || card.content}</p>

@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { safeUrl } from '../../../utils/safeUrl';
+import { MediaImg, MediaDownloadLink } from '../MediaFile';
+import { resolveMediaUrl } from '../../../utils/media';
 import { X, MoreVertical, Trash2, ArrowRight, Heart, Link2, Paperclip, Download, Eye } from 'lucide-react';
 import { getFileTypeInfo, formatFileSize } from '../../../utils/fileIcons';
 import DocumentPreviewModal from '../DocumentPreviewModal';
@@ -152,14 +155,20 @@ export default function KanbanCardDetail({
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <div className="flex items-center space-x-2">
                   <Link2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                  <a
-                    href={card.linkUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:underline break-all"
-                  >
-                    {card.linkUrl}
-                  </a>
+                  {safeUrl(card.linkUrl) ? (
+                    <a
+                      href={safeUrl(card.linkUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:underline break-all"
+                    >
+                      {card.linkUrl}
+                    </a>
+                  ) : (
+                    <span className="text-sm text-gray-500 break-all" title="Only http and https links are clickable">
+                      {card.linkUrl}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -167,7 +176,7 @@ export default function KanbanCardDetail({
             {/* Legacy Image */}
             {card.imageUrl && (
               <div className="rounded-lg overflow-hidden border">
-                <img src={card.imageUrl} alt="" className="w-full" />
+                <MediaImg src={card.imageUrl} alt="" className="w-full" />
               </div>
             )}
 
@@ -185,13 +194,13 @@ export default function KanbanCardDetail({
                   if (isImage && file.dataUrl) {
                     return (
                       <div key={file.id} className="border rounded-lg overflow-hidden">
-                        <img src={file.dataUrl} alt={file.name} className="w-full max-h-64 object-contain bg-gray-50" />
+                        <MediaImg src={file.dataUrl} alt={file.name} className="w-full max-h-64 object-contain bg-gray-50" />
                         <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-t">
                           <span className="text-xs text-gray-600 truncate">{file.name}</span>
-                          <a href={file.dataUrl} download={file.name} className="text-xs text-indigo-600 hover:underline flex items-center space-x-1">
+                          <MediaDownloadLink src={file.dataUrl} name={file.name} className="text-xs text-indigo-600 hover:underline flex items-center space-x-1">
                             <Download className="w-3 h-3" />
                             <span>Download</span>
-                          </a>
+                          </MediaDownloadLink>
                         </div>
                       </div>
                     );
@@ -208,15 +217,15 @@ export default function KanbanCardDetail({
                         {file.dataUrl && (
                           <>
                             <button
-                              onClick={() => setPreviewFile(file)}
+                              onClick={async () => { const url = await resolveMediaUrl(file.dataUrl); if (url) setPreviewFile({ ...file, dataUrl: url }); else window.alert("This file is not available."); }}
                               className="p-1 text-gray-400 hover:text-indigo-600 rounded"
                               title="Preview"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-                            <a href={file.dataUrl} download={file.name} className="p-1 text-gray-400 hover:text-indigo-600 rounded" title="Download">
+                            <MediaDownloadLink src={file.dataUrl} name={file.name} className="p-1 text-gray-400 hover:text-indigo-600 rounded" title="Download">
                               <Download className="w-4 h-4" />
-                            </a>
+                            </MediaDownloadLink>
                           </>
                         )}
                       </div>

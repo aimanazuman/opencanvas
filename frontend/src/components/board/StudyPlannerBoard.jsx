@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
+import { safeUrl, safeUrlWithDefaultScheme } from '../../utils/safeUrl';
 import {
   Target, X, Check, Bell, Paperclip, Link2, MessageSquare,
   CheckCircle, Trash2, ChevronLeft, ChevronRight, Calendar,
@@ -421,8 +422,11 @@ export default function StudyPlannerBoard() {
 
   const handleAddLink = () => {
     if (!newLink.trim()) return;
-    let url = newLink.trim();
-    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    const url = safeUrlWithDefaultScheme(newLink);
+    if (!url) {
+      window.alert('Only http and https links can be added.');
+      return;
+    }
     setCellLinks(prev => [...prev, { id: Date.now().toString(), url }]);
     setNewLink('');
   };
@@ -870,9 +874,13 @@ export default function StudyPlannerBoard() {
                   <div className="space-y-1 mb-2">
                     {cellLinks.map(link => (
                       <div key={link.id} className="flex items-center gap-2 text-sm px-2 py-1 bg-gray-50 rounded">
-                        <a href={link.url} target="_blank" rel="noopener noreferrer" className="truncate flex-1 text-blue-600 hover:underline">
-                          {link.url}
-                        </a>
+                        {safeUrl(link.url) ? (
+                          <a href={safeUrl(link.url)} target="_blank" rel="noopener noreferrer" className="truncate flex-1 text-blue-600 hover:underline">
+                            {link.url}
+                          </a>
+                        ) : (
+                          <span className="truncate flex-1 text-gray-500" title="Only http and https links are clickable">{link.url}</span>
+                        )}
                         <button onClick={() => handleRemoveLink(link.id)} className="text-red-400 hover:text-red-600">
                           <Trash2 size={14} />
                         </button>

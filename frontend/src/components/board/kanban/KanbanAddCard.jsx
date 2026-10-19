@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { safeUrlWithDefaultScheme } from '../../../utils/safeUrl';
 import { Plus, X, Paperclip, FileText, Loader2, ImageIcon } from 'lucide-react';
 import { createKanbanCard, generateId } from '../../../utils/boardHelpers';
 import { formatFileSize } from '../../../utils/fileIcons';
@@ -50,7 +51,7 @@ export default function KanbanAddCard({ columnId, isAdding, onAdd, onCancel }) {
     const card = createKanbanCard(title.trim());
     card.title = title.trim();
     card.content = description.trim();
-    card.linkUrl = linkUrl.trim();
+    card.linkUrl = safeUrlWithDefaultScheme(linkUrl) || '';
 
     if (pendingFiles.length > 0) {
       setUploading(true);

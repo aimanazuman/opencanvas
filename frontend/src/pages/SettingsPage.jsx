@@ -61,11 +61,16 @@ const SettingsPage = ({ onNavigate }) => {
       return;
     }
     try {
-      await authApi.changePassword({
+      const res = await authApi.changePassword({
         old_password: passwordData.currentPassword,
         new_password: passwordData.newPassword,
         new_password2: passwordData.confirmPassword,
       });
+      // Changing the password revokes every refresh token; the server returns fresh ones for this browser.
+      if (res.data?.tokens?.access && res.data?.tokens?.refresh) {
+        localStorage.setItem('access_token', res.data.tokens.access);
+        localStorage.setItem('refresh_token', res.data.tokens.refresh);
+      }
       setShowPasswordModal(false);
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setSaveSuccess(true);

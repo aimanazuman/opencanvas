@@ -3,6 +3,7 @@ import { FolderOpen, Upload, Trash2, Eye, Download, Loader2 } from 'lucide-react
 import { getFileTypeInfo, isPreviewable } from '../../../utils/fileIcons';
 import DocumentPreviewModal from '../DocumentPreviewModal';
 import { uploadFiles } from '../../../utils/fileUpload';
+import { resolveMediaUrl } from '../../../utils/media';
 
 export default function ResourceLibraryBlock({ block, canEdit, onUpdate, onDelete }) {
   const [editingTitle, setEditingTitle] = useState(false);
@@ -58,6 +59,26 @@ export default function ResourceLibraryBlock({ block, canEdit, onUpdate, onDelet
       addedAt: new Date().toISOString(),
     }));
     onUpdate({ files: [...currentFiles, ...serverFiles] });
+  };
+
+  // Stored references are exchanged for a short-lived signed URL just before they are used.
+  const openFile = async (file, mode) => {
+    const url = await resolveMediaUrl(file.url);
+    if (!url) {
+      window.alert('This file is not available.');
+      return;
+    }
+    if (mode === 'preview') {
+      setPreviewFile({ ...file, url });
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file.name || 'download';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   };
 
   const handleRemoveFile = (fileId) => {
@@ -156,7 +177,7 @@ export default function ResourceLibraryBlock({ block, canEdit, onUpdate, onDelet
                 <div className="flex items-center gap-1 shrink-0">
                   {canPreview && !isUploading && (
                     <button
-                      onClick={() => setPreviewFile(file)}
+                      onClick={() => openFile(file, 'preview')}
                       className="p-1 text-gray-400 hover:text-blue-600"
                       title="Preview"
                     >
@@ -164,14 +185,13 @@ export default function ResourceLibraryBlock({ block, canEdit, onUpdate, onDelet
                     </button>
                   )}
                   {file.url && !isUploading && (
-                    <a
-                      href={file.url}
-                      download={file.name}
+                    <button
+                      onClick={() => openFile(file, 'download')}
                       className="p-1 text-gray-400 hover:text-green-600"
                       title="Download"
                     >
                       <Download size={14} />
-                    </a>
+                    </button>
                   )}
                   {canEdit && (
                     <button

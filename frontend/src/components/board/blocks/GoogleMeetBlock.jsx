@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Video, Trash2, ExternalLink, Calendar } from 'lucide-react';
+import { safeUrl, safeUrlWithDefaultScheme } from '../../../utils/safeUrl';
 
 export default function GoogleMeetBlock({ block, canEdit, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
@@ -8,9 +9,17 @@ export default function GoogleMeetBlock({ block, canEdit, onUpdate, onDelete }) 
   const [scheduledAt, setScheduledAt] = useState(block.scheduledAt || '');
 
   const handleSave = () => {
-    onUpdate({ meetUrl, title, scheduledAt });
+    const cleanUrl = meetUrl.trim() ? safeUrlWithDefaultScheme(meetUrl) : '';
+    if (cleanUrl === null) {
+      window.alert('Only http and https links are allowed.');
+      return;
+    }
+    onUpdate({ meetUrl: cleanUrl, title, scheduledAt });
     setEditing(false);
   };
+
+  // Board content is written by users: check the stored link again before it becomes a clickable address.
+  const meetHref = safeUrl(block.meetUrl);
 
   if (editing && canEdit) {
     return (
@@ -116,16 +125,20 @@ export default function GoogleMeetBlock({ block, canEdit, onUpdate, onDelete }) 
         </div>
       </div>
       <div className="px-4 pb-3">
-        <a
-          href={block.meetUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
-        >
-          <Video size={16} />
-          Join Meeting
-          <ExternalLink size={14} />
-        </a>
+        {meetHref ? (
+          <a
+            href={meetHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+          >
+            <Video size={16} />
+            Join Meeting
+            <ExternalLink size={14} />
+          </a>
+        ) : (
+          <span className="text-sm text-red-600">This meeting link was blocked because it is not a normal web address.</span>
+        )}
       </div>
     </div>
   );

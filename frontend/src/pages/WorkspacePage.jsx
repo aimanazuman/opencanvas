@@ -7,6 +7,7 @@ import { BOARD_TYPES } from '../utils/boardHelpers';
 import { createEmptyBoard } from '../utils/mockData';
 import { createBoardFromTemplate } from '../utils/templateDefinitions';
 import { boardsApi } from '../services/api';
+import { setMediaBoardId } from '../utils/media';
 import { saveGuestBoard, getGuestBoardById } from '../utils/guestStorage';
 import BoardHeader from '../components/board/BoardHeader';
 import LectureNotesBoard from '../components/board/LectureNotesBoard';
@@ -40,6 +41,7 @@ function WorkspaceContent({ onNavigate }) {
 
   useEffect(() => {
     const fetchBoard = async () => {
+      setMediaBoardId(null);
       // Try loading existing board by ID
       if (boardId) {
         // Guest boards stored locally: try localStorage first, then fall through to API
@@ -55,6 +57,8 @@ function WorkspaceContent({ onNavigate }) {
         try {
           const response = await boardsApi.get(boardId);
           const serverBoard = response.data;
+          // uploaded files embedded in this board are authorised through the board (see utils/media.js)
+          setMediaBoardId(serverBoard.id);
 
           // Set permissions from server response
           setCanEdit(serverBoard.can_edit !== false);

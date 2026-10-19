@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { Video, Trash2, Edit3, Check } from 'lucide-react';
 import { getVideoEmbedUrl } from '../../../utils/boardHelpers';
+import { safeUrl, EXTERNAL_IFRAME_SANDBOX } from '../../../utils/safeUrl';
 
 export default function VideoBlock({ block, canEdit, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(!block.url);
   const [url, setUrl] = useState(block.url || '');
+  // Stored values are written by users: only plain http(s) addresses may reach the iframe.
+  const embedSrc = safeUrl(block.embedUrl) || safeUrl(getVideoEmbedUrl(block.url));
 
   const handleSave = () => {
     const embedUrl = getVideoEmbedUrl(url);
@@ -56,13 +59,20 @@ export default function VideoBlock({ block, canEdit, onUpdate, onDelete }) {
   return (
     <div className="group relative">
       <div className="aspect-video rounded-lg overflow-hidden bg-black">
-        <iframe
-          src={block.embedUrl || getVideoEmbedUrl(block.url)}
-          title="Embedded video"
-          className="w-full h-full"
-          allowFullScreen
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        />
+        {embedSrc ? (
+          <iframe
+            src={embedSrc}
+            sandbox={EXTERNAL_IFRAME_SANDBOX}
+            title="Embedded video"
+            className="w-full h-full"
+            allowFullScreen
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-sm text-gray-300 p-4 text-center">
+            This video address was blocked because it is not a normal web address.
+          </div>
+        )}
       </div>
       {canEdit && (
         <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition flex space-x-1">

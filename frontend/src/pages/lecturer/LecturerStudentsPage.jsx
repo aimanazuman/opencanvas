@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { openMailto } from '../../utils/safeUrl';
 import {
   UserPlus, Search, Filter, Eye, Mail, X, Users, Upload, Edit3, Check, ChevronDown, Calendar
 } from 'lucide-react';
@@ -65,7 +66,7 @@ export default function LecturerStudentsPage() {
 
   const handleSearchStudent = async (query) => {
     setStudentQuery(query);
-    if (query.length < 2) { setStudentResults([]); return; }
+    if (query.length < 3) { setStudentResults([]); return; }
     try {
       const res = await usersApi.search(query);
       setStudentResults(res.data.results || res.data);
@@ -453,7 +454,7 @@ export default function LecturerStudentsPage() {
                             <button onClick={() => setViewingStudent(student)} className="p-1 hover:bg-gray-100 rounded text-gray-600" title="View student">
                               <Eye className="w-4 h-4" />
                             </button>
-                            <button onClick={() => student.email && window.open(`mailto:${student.email}`, '_blank')} className="p-1 hover:bg-gray-100 rounded text-gray-600" title="Email student">
+                            <button onClick={() => openMailto(student.email)} className="p-1 hover:bg-gray-100 rounded text-gray-600" title="Email student">
                               <Mail className="w-4 h-4" />
                             </button>
                           </>
@@ -535,7 +536,7 @@ export default function LecturerStudentsPage() {
             </div>
             <div className="p-6 border-t flex gap-3">
               <button
-                onClick={() => viewingStudent.email && window.open(`mailto:${viewingStudent.email}`, '_blank')}
+                onClick={() => openMailto(viewingStudent.email)}
                 className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center justify-center space-x-2"
               >
                 <Mail className="w-4 h-4" /><span>Send Email</span>
@@ -583,7 +584,7 @@ export default function LecturerStudentsPage() {
                     type="text" value={studentQuery}
                     onChange={(e) => handleSearchStudent(e.target.value)}
                     className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Search by name or email..."
+                    placeholder="Search by name or username (3+ letters)..."
                   />
                 </div>
                 {studentResults.length > 0 && (
@@ -604,7 +605,7 @@ export default function LecturerStudentsPage() {
                           />
                           <div className="flex-1 min-w-0">
                             <span className="font-medium">{u.first_name} {u.last_name}</span>
-                            <span className="text-gray-500 ml-2 text-xs">{u.email}</span>
+                            <span className="text-gray-500 ml-2 text-xs">{u.email_hint || u.email}</span>
                             {u.role && u.role !== 'student' && (
                               <span className="ml-2 px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">{u.role}</span>
                             )}
