@@ -65,12 +65,14 @@ def _page(title, inner):
     """Common HTML shell. `title` is a fixed string; `inner` is HTML whose dynamic values are already escaped."""
     return f"""
     <html>
-    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #4F46E5, #7C3AED); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">{escape(title)}</h1>
-        </div>
-        <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
-            {inner}{_FOOTER}
+    <body style="font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #F5F5F5; margin: 0; padding: 24px 12px;">
+        <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border: 1px solid #D9D9D9; border-top: 3px solid #0A66C2; border-radius: 4px;">
+            <div style="padding: 20px 28px; border-bottom: 1px solid #E6E6E6;">
+                <h1 style="color: #1A1A1A; margin: 0; font-size: 20px; font-weight: 600;">{escape(title)}</h1>
+            </div>
+            <div style="padding: 24px 28px;">
+                {inner}{_FOOTER}
+            </div>
         </div>
     </body>
     </html>
@@ -80,15 +82,15 @@ def _page(title, inner):
 def _button(url, label):
     return (
         f'<div style="text-align: center; margin: 30px 0;">'
-        f'<a href="{escape(url)}" style="display: inline-block; background: #4F46E5; color: white; padding: 14px 32px; '
-        f'border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 15px;">{escape(label)}</a></div>'
+        f'<a href="{escape(url)}" style="display: inline-block; background: #0A66C2; color: white; padding: 10px 24px; '
+        f'border-radius: 4px; text-decoration: none; font-weight: 600; font-size: 14px;">{escape(label)}</a></div>'
     )
 
 
 def _link_fallback(url):
     return (
         '<p style="font-size: 12px; color: #9CA3AF;">Or copy this link into your browser:<br />'
-        f'<a href="{escape(url)}" style="color: #4F46E5; word-break: break-all;">{escape(url)}</a></p>'
+        f'<a href="{escape(url)}" style="color: #0A66C2; word-break: break-all;">{escape(url)}</a></p>'
     )
 
 
@@ -196,7 +198,7 @@ def send_course_enrolled_email(user, course):
     inner = (
         f'<p style="font-size: 16px; color: #374151;">Hi {escape(name)},</p>'
         '<p style="font-size: 14px; color: #6B7280;">You have been successfully enrolled in the following course:</p>'
-        '<div style="background: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">'
+        '<div style="background: #F5F5F5; border: 1px solid #E6E6E6; padding: 16px 20px; border-radius: 4px; margin: 20px 0;">'
         f'<p style="margin: 5px 0; font-size: 14px;"><strong>Course Code:</strong> {escape(course.code)}</p>'
         f'<p style="margin: 5px 0; font-size: 14px;"><strong>Course Name:</strong> {escape(course.name)}</p>'
         '</div>'
