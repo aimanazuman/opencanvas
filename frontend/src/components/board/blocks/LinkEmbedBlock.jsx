@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
-import { Link2, ExternalLink, Trash2, Globe } from 'lucide-react';
+import { Link2, ExternalLink, Trash2, Globe, AlertTriangle } from 'lucide-react';
 import { safeUrl, safeUrlWithDefaultScheme, EXTERNAL_IFRAME_SANDBOX } from '../../../utils/safeUrl';
+import { ClassroomButton } from '../../classroom';
+
+const PLACEHOLDER = 'rounded-lg border-2 border-dashed border-line-strong bg-surface p-6 text-center';
+// 44 px on phones, 32 px on desktop.
+const ICON_BTN = 'btn-motion flex h-11 w-11 flex-none items-center justify-center rounded hover:bg-surface-hover md:h-8 md:w-8';
 
 export default function LinkEmbedBlock({ block, canEdit, onUpdate, onDelete }) {
   const [urlInput, setUrlInput] = useState('');
@@ -21,11 +26,14 @@ export default function LinkEmbedBlock({ block, canEdit, onUpdate, onDelete }) {
 
   if (block.linkUrl && !linkHref) {
     return (
-      <div className="border border-red-200 rounded-lg p-4 bg-red-50 text-sm text-red-700 flex items-center justify-between">
-        <span>This link was blocked because it is not a normal web address.</span>
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-surface p-4 text-sm text-ink">
+        <span className="flex min-w-0 items-center gap-2">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0 text-danger" strokeWidth={1.5} aria-hidden="true" />
+          <span>This link was blocked because it is not a normal web address.</span>
+        </span>
         {canEdit && (
-          <button onClick={onDelete} className="p-1 text-gray-400 hover:text-red-500" title="Remove">
-            <Trash2 size={16} />
+          <button type="button" onClick={onDelete} className={`${ICON_BTN} text-ink-2 hover:text-danger`} title="Remove" aria-label="Remove">
+            <Trash2 size={16} strokeWidth={1.5} aria-hidden="true" />
           </button>
         )}
       </div>
@@ -34,32 +42,30 @@ export default function LinkEmbedBlock({ block, canEdit, onUpdate, onDelete }) {
 
   if (!block.linkUrl) {
     return (
-      <div className="border-2 border-dashed border-cyan-300 rounded-lg p-6 text-center bg-cyan-50">
+      <div className={PLACEHOLDER}>
         {canEdit ? (
           <>
-            <Link2 className="mx-auto mb-2 text-cyan-400" size={32} />
-            <p className="text-sm text-cyan-600 mb-2">Embed a link or website</p>
+            <Link2 className="mx-auto mb-2 text-accent" size={32} strokeWidth={1.5} aria-hidden="true" />
+            <p className="text-sm text-ink-2 mb-2">Embed a link or website</p>
             <div className="flex gap-2 max-w-md mx-auto">
               <input
                 type="text"
+                aria-label="Link address"
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSetUrl()}
                 placeholder="https://example.com"
-                className="flex-1 px-3 py-1.5 border rounded text-sm"
+                className="min-h-[44px] min-w-0 flex-1 rounded border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent md:min-h-[32px]"
               />
-              <button
-                onClick={handleSetUrl}
-                className="px-3 py-1.5 bg-cyan-500 text-white rounded text-sm hover:bg-cyan-600"
-              >
+              <ClassroomButton variant="primary" onClick={handleSetUrl}>
                 Embed
-              </button>
+              </ClassroomButton>
             </div>
           </>
         ) : (
           <>
-            <Link2 className="mx-auto mb-2 text-cyan-400" size={32} />
-            <p className="text-sm text-gray-500">No link set</p>
+            <Link2 className="mx-auto mb-2 text-ink-3" size={32} strokeWidth={1.5} aria-hidden="true" />
+            <p className="text-sm text-ink-2">No link set</p>
           </>
         )}
       </div>
@@ -67,35 +73,37 @@ export default function LinkEmbedBlock({ block, canEdit, onUpdate, onDelete }) {
   }
 
   return (
-    <div className="border border-cyan-200 rounded-lg bg-cyan-50 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-cyan-200">
-        <div className="flex items-center gap-2 min-w-0">
-          <Globe size={16} className="text-cyan-600 shrink-0" />
+    <div className="rounded-lg border border-line bg-surface overflow-hidden">
+      <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Globe size={16} strokeWidth={1.5} className="flex-shrink-0 text-accent" aria-hidden="true" />
           {canEdit ? (
             <input
               type="text"
+              aria-label="Link title"
               value={block.linkTitle || ''}
               onChange={(e) => onUpdate({ linkTitle: e.target.value })}
-              className="text-sm font-medium text-cyan-800 bg-transparent border-none outline-none flex-1 min-w-0"
+              className="min-w-0 flex-1 border-none bg-transparent text-sm font-medium text-ink outline-none"
               placeholder="Link title"
             />
           ) : (
-            <span className="text-sm font-medium text-cyan-800 truncate">{block.linkTitle || block.linkUrl}</span>
+            <span className="text-sm font-medium text-ink truncate">{block.linkTitle || block.linkUrl}</span>
           )}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-1">
           <a
             href={linkHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-1 text-cyan-500 hover:text-cyan-700"
+            className={`${ICON_BTN} text-accent`}
             title="Open link"
+            aria-label="Open link"
           >
-            <ExternalLink size={16} />
+            <ExternalLink size={16} strokeWidth={1.5} aria-hidden="true" />
           </a>
           {canEdit && (
-            <button onClick={onDelete} className="p-1 text-gray-400 hover:text-red-500" title="Remove">
-              <Trash2 size={16} />
+            <button type="button" onClick={onDelete} className={`${ICON_BTN} text-ink-2 hover:text-danger`} title="Remove" aria-label="Remove">
+              <Trash2 size={16} strokeWidth={1.5} aria-hidden="true" />
             </button>
           )}
         </div>
@@ -103,6 +111,7 @@ export default function LinkEmbedBlock({ block, canEdit, onUpdate, onDelete }) {
       {block.embed ? (
         <iframe
           src={linkHref}
+          loading="lazy"
           title={block.linkTitle || 'Embedded content'}
           className="w-full h-64 border-0"
           sandbox={EXTERNAL_IFRAME_SANDBOX}
@@ -112,14 +121,14 @@ export default function LinkEmbedBlock({ block, canEdit, onUpdate, onDelete }) {
           href={linkHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="block px-4 py-3 text-sm text-cyan-700 hover:bg-cyan-100 truncate"
+          className="block truncate px-4 py-3 text-sm text-accent hover:bg-surface-hover"
         >
           {linkHref}
         </a>
       )}
       {canEdit && (
-        <div className="px-4 py-2 border-t border-cyan-200">
-          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+        <div className="border-t border-line px-4 py-2">
+          <label className="flex items-center gap-2 text-xs text-ink-2 cursor-pointer">
             <input
               type="checkbox"
               checked={block.embed || false}

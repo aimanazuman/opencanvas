@@ -1,11 +1,43 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  BookOpen, Users, Folder, FileText, Plus, Trash2, Eye, BarChart,
-  Settings, X, Layers, Share2, Copy, RefreshCw, Link, Check
+  BookOpen, Users, Folder, FileText, Plus, Trash2, Eye, BarChart, Layers, Share2, Copy, RefreshCw, Link, Check,
 } from 'lucide-react';
 import { coursesApi, boardsApi } from '../../services/api';
 import { useLecturerData } from '../../hooks/useLecturerData';
+import { courseStatus, spineFor } from '../student/studentMappings';
+import {
+  ChalkboardHeader, ChalkBadge, ClassroomAlert, ClassroomButton, ClassroomDialog, ClassroomField, PaperPanel, StickyNote,
+} from '../../components/classroom';
+import cx from '../../components/classroom/cx';
+
+// Static class lookups: Tailwind only sees literal class names.
+const VIEW_CHOICE_BASE = 'inline-flex h-11 items-center gap-1.5 rounded border px-3 text-sm font-medium md:h-8';
+const VIEW_CHOICE = {
+  on: 'border-accent bg-accent-tint text-accent-700',
+  off: 'border-line-strong bg-surface text-ink hover:bg-surface-hover',
+};
+const ICON_BUTTON = 'flex h-11 w-11 flex-none items-center justify-center rounded text-ink-2 hover:bg-surface-hover hover:text-danger md:h-8 md:w-8';
+const SECTION_TILE = 'flex min-h-[44px] w-full flex-col rounded-lg border border-line-strong bg-surface p-4 text-left hover:border-accent hover:bg-surface-hover';
+const COPY_BUTTON = 'flex h-11 w-11 flex-none items-center justify-center rounded border md:h-8 md:w-8';
+const COPY_BUTTON_IDLE = 'border-line-strong bg-surface text-ink hover:bg-surface-hover';
+const COPY_BUTTON_DONE = 'border-success bg-success-tint text-success';
+const STAT_TILE = 'rounded-lg border border-line p-4 text-center';
+
+// Element id for a course card's name (used by aria-labelledby).
+function courseTitleId(courseId) {
+  return 'course-' + courseId + '-name';
+}
+
+// Loading placeholder: static blocks, announced once through a status region.
+function CoursesSkeleton() {
+  return (
+    <div role="status" aria-busy="true" className="space-y-4">
+      <span className="sr-only">Loading courses</span>
+      {[0, 1].map((i) => <div key={i} aria-hidden="true" className="h-44 rounded-lg border border-line bg-line" />)}
+    </div>
+  );
+}
 
 function CourseInviteModal({ course, onClose, onRegenerate }) {
   const [copied, setCopied] = useState(false);
@@ -39,72 +71,66 @@ function CourseInviteModal({ course, onClose, onRegenerate }) {
     }
   };
 
+  const announcement = [copied && 'Invite code copied', copiedLink && 'Invite link copied'].filter(Boolean).join('. ');
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-md animate-scaleIn">
-        <div className="p-6 border-b">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold text-gray-900">Share Course</h3>
-              <p className="text-sm text-gray-500">{course.code} - {course.name}</p>
-            </div>
-            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
-          </div>
-        </div>
-        <div className="p-6 space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Invite Code</label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-center">
-                <span className="text-2xl font-mono font-bold tracking-widest text-indigo-600">{course.invite_code}</span>
-              </div>
-              <button
-                onClick={copyCode}
-                className={`px-3 py-3 rounded-lg border transition font-medium text-sm ${copied ? 'bg-green-50 border-green-300 text-green-700' : 'border-gray-300 hover:bg-gray-50 text-gray-600'}`}
-              >
-                {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">Share this code with students so they can join the course</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Invite Link</label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 truncate">
-                {inviteLink}
-              </div>
-              <button
-                onClick={copyLink}
-                className={`px-3 py-2 rounded-lg border transition font-medium text-sm ${copiedLink ? 'bg-green-50 border-green-300 text-green-700' : 'border-gray-300 hover:bg-gray-50 text-gray-600'}`}
-              >
-                {copiedLink ? <Check className="w-5 h-5" /> : <Link className="w-5 h-5" />}
-              </button>
-            </div>
-          </div>
-
+    <ClassroomDialog
+      titleId="courses-share-title"
+      title="Share Course"
+      subtitle={`${course.code} - ${course.name}`}
+      onClose={onClose}
+      footer={<ClassroomButton className="w-full" onClick={onClose}>Done</ClassroomButton>}
+    >
+      <section aria-labelledby="invite-code-heading">
+        <h3 id="invite-code-heading" className="mb-2 text-sm font-medium text-ink">Invite Code</h3>
+        <div className="flex items-center gap-2">
+          <p className="min-w-0 flex-1 rounded border border-line bg-surface-hover px-4 py-3 text-center font-mono text-2xl font-semibold tracking-widest text-accent-700">
+            {course.invite_code}
+          </p>
           <button
-            onClick={handleRegenerate}
-            disabled={regenerating}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 transition"
+            type="button"
+            onClick={copyCode}
+            aria-label="Copy invite code"
+            className={cx(COPY_BUTTON, copied ? COPY_BUTTON_DONE : COPY_BUTTON_IDLE)}
           >
-            <RefreshCw className={`w-4 h-4 ${regenerating ? 'animate-spin' : ''}`} />
-            <span>{regenerating ? 'Regenerating...' : 'Regenerate Invite Code'}</span>
+            {copied ? <Check className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" /> : <Copy className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" />}
           </button>
         </div>
-        <div className="p-6 border-t">
-          <button onClick={onClose} className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium">Done</button>
+        <p className="mt-2 text-xs text-ink-2">Share this code with students so they can join the course</p>
+      </section>
+
+      <section aria-labelledby="invite-link-heading">
+        <h3 id="invite-link-heading" className="mb-2 text-sm font-medium text-ink">Invite Link</h3>
+        <div className="flex items-center gap-2">
+          <p className="min-w-0 flex-1 truncate rounded border border-line bg-surface-hover px-3 py-2 text-sm text-ink-2">{inviteLink}</p>
+          <button
+            type="button"
+            onClick={copyLink}
+            aria-label="Copy invite link"
+            className={cx(COPY_BUTTON, copiedLink ? COPY_BUTTON_DONE : COPY_BUTTON_IDLE)}
+          >
+            {copiedLink ? <Check className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" /> : <Link className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" />}
+          </button>
         </div>
-      </div>
-    </div>
+      </section>
+
+      <ClassroomButton
+        className="w-full"
+        icon={RefreshCw}
+        loading={regenerating}
+        onClick={handleRegenerate}
+      >
+        {regenerating ? 'Regenerating...' : 'Regenerate Invite Code'}
+      </ClassroomButton>
+
+      <p role="status" className="sr-only">{announcement}</p>
+    </ClassroomDialog>
   );
 }
 
 export default function LecturerCoursesPage({ onNavigate }) {
   const navigate = useNavigate();
-  const { courses, loading, loadCourses, loadEnrollments, getSectionsForCourse } = useLecturerData();
+  const { courses, loading, loadFailed, reload, loadCourses, loadEnrollments, getSectionsForCourse } = useLecturerData();
   const [viewMode, setViewMode] = useState('sections');
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [selectedSection, setSelectedSection] = useState(null);
@@ -118,12 +144,12 @@ export default function LecturerCoursesPage({ onNavigate }) {
   const [sectionBoardCount, setSectionBoardCount] = useState(0);
 
   // Keep section modal in sync when courses reload
-  React.useEffect(() => {
+  useEffect(() => {
     if (showSectionModal) {
       const updated = courses.find(c => c.id === showSectionModal.id);
       if (updated) setShowSectionModal(updated);
     }
-  }, [courses]);
+  }, [courses, showSectionModal]);
 
   const handleAddSection = async (course) => {
     const name = newSectionName.trim();
@@ -177,6 +203,13 @@ export default function LecturerCoursesPage({ onNavigate }) {
     }
   };
 
+  const closeAddCourseModal = () => {
+    setShowAddCourseModal(false);
+    setCourseError('');
+  };
+
+  const closeSectionModal = () => setShowSectionModal(null);
+
   const openSectionDetail = async (course, section) => {
     setSelectedSection({ course, section });
     setSectionBoardCount(0);
@@ -203,386 +236,343 @@ export default function LecturerCoursesPage({ onNavigate }) {
     }
   };
 
+  let body;
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600" />
-      </div>
+    body = <CoursesSkeleton />;
+  } else if (loadFailed) {
+    // A failed load must not look like an empty list: the alert replaces the lists.
+    body = (
+      <ClassroomAlert>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p>Could not load your courses or enrolments. Check your connection and try again.</p>
+          <ClassroomButton onClick={reload}>Try again</ClassroomButton>
+        </div>
+      </ClassroomAlert>
+    );
+  } else if (courses.length === 0) {
+    body = (
+      <StickyNote color="azure" className="mx-auto max-w-sm items-center text-center">
+        <BookOpen className="mb-2 h-5 w-5 text-ink-2" strokeWidth={1.5} aria-hidden="true" />
+        <h2 className="font-hand text-lg leading-tight text-ink">No courses yet</h2>
+        <p className="mt-1 text-sm text-ink">Create your first course to get started</p>
+      </StickyNote>
+    );
+  } else {
+    body = (
+      <ul className="space-y-4" aria-label="Courses">
+        {courses.map(course => {
+          const sections = getSectionsForCourse(course.id);
+          const status = courseStatus(course);
+          const definedSections = course.sections || [];
+          // Merge: show all defined sections + any enrollment-only sections
+          const sectionNames = [...new Set([...definedSections, ...sections.map(s => s.name)])].filter(n => n !== 'Unassigned');
+          const unassigned = sections.find(s => s.name === 'Unassigned');
+          const sectionCount = definedSections.length || sections.length;
+          return (
+            <li key={course.id}>
+              <PaperPanel as="article" padded={false} aria-labelledby={courseTitleId(course.id)} className="relative overflow-hidden">
+                <span aria-hidden="true" className={cx('absolute inset-y-0 left-0 w-2', spineFor(course.id))} />
+                <div className="p-4 pl-6 md:p-5 md:pl-7">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex h-6 items-center rounded bg-accent-tint px-2 text-xs font-semibold text-accent-700">
+                          {course.code}
+                        </span>
+                        <ChalkBadge label={status.label} icon={status.icon} tone={status.tone} />
+                      </div>
+                      <h2 id={courseTitleId(course.id)} className="break-words text-lg font-semibold leading-snug text-ink">
+                        {course.name}
+                      </h2>
+                      <ul aria-label="Course totals" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-2">
+                        <li className="flex items-center gap-1"><Users className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />{course.student_count || 0} students</li>
+                        <li className="flex items-center gap-1"><Folder className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />{sectionCount} sections</li>
+                        <li className="flex items-center gap-1"><FileText className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />{course.board_count || 0} boards</li>
+                      </ul>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCourse(course.id)}
+                      className={cx(ICON_BUTTON, 'self-start')}
+                      title="Delete course"
+                      aria-label="Delete course"
+                    >
+                      <Trash2 className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <ClassroomButton icon={Eye} className="min-w-[140px] flex-1" onClick={() => navigate(`/lecturer/boards?course=${course.id}`)}>
+                      View Boards
+                    </ClassroomButton>
+                    <ClassroomButton icon={BarChart} className="min-w-[140px] flex-1" onClick={() => navigate('/lecturer/analytics')}>
+                      Analytics
+                    </ClassroomButton>
+                    <ClassroomButton icon={Plus} className="min-w-[140px] flex-1" onClick={() => onNavigate('lecturer-templates', { courseId: course.id, courseName: course.code })}>
+                      New Board
+                    </ClassroomButton>
+                    <ClassroomButton icon={Layers} className="min-w-[140px] flex-1" onClick={() => { setShowSectionModal(course); setNewSectionName(''); setSectionError(''); }}>
+                      Sections
+                    </ClassroomButton>
+                    <ClassroomButton icon={Share2} className="min-w-[140px] flex-1" onClick={() => setShowInviteModal(course)}>
+                      Share
+                    </ClassroomButton>
+                  </div>
+                </div>
+
+                {viewMode === 'sections' && (sectionNames.length > 0 || unassigned) && (
+                  <div className="border-t border-line bg-surface-hover p-4 md:p-5">
+                    <h3 className="mb-3 font-semibold text-ink">Sections</h3>
+                    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {sectionNames.map((name) => {
+                        const enrollData = sections.find(s => s.name === name);
+                        const studentCount = enrollData ? enrollData.students : 0;
+                        return (
+                          <li key={name}>
+                            <button
+                              type="button"
+                              onClick={() => openSectionDetail(course, { name, students: studentCount, enrollments: enrollData?.enrollments || [] })}
+                              className={SECTION_TILE}
+                            >
+                              <span className="font-semibold text-ink">Section {name}</span>
+                              <span className="mt-1 text-sm text-ink-2">{studentCount} students</span>
+                              <span className="mt-3 flex items-center gap-2">
+                                <span aria-hidden="true" className="flex -space-x-2">
+                                  {[...Array(Math.min(3, studentCount))].map((_, i) => (
+                                    <span key={i} className="h-6 w-6 rounded-full border-2 border-surface bg-accent-400" />
+                                  ))}
+                                </span>
+                                {studentCount > 3 && <span className="text-xs text-ink-2">+{studentCount - 3}</span>}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                      {unassigned && (
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() => openSectionDetail(course, unassigned)}
+                            className={SECTION_TILE}
+                          >
+                            <span className="font-semibold text-ink">No Section</span>
+                            <span className="mt-1 text-sm text-ink-2">{unassigned.students} students</span>
+                          </button>
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </PaperPanel>
+            </li>
+          );
+        })}
+      </ul>
     );
   }
 
   return (
-    <>
-      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">My Courses</h1>
-          <p className="text-gray-600 mt-1">Manage courses, sections, and student activities</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex border border-gray-300 rounded-lg overflow-hidden">
-            <button
-              onClick={() => setViewMode('sections')}
-              className={`px-3 py-2 text-sm ${viewMode === 'sections' ? 'bg-indigo-100 text-indigo-600' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-            >
-              Sections View
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`px-3 py-2 text-sm ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-            >
-              List View
-            </button>
-          </div>
-          <button
-            onClick={() => setShowAddCourseModal(true)}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center space-x-2"
-          >
-            <Plus className="w-5 h-5" />
-            <span>New Course</span>
-          </button>
-        </div>
-      </div>
+    <div className="space-y-4">
+      <ChalkboardHeader
+        size="compact"
+        titleId="courses-title"
+        title="My Courses"
+        subtitle="Manage courses, sections, and student activities"
+        actions={
+          <ClassroomButton onChalk icon={Plus} onClick={() => setShowAddCourseModal(true)}>
+            New Course
+          </ClassroomButton>
+        }
+      />
 
-      {courses.length === 0 && (
-        <div className="text-center py-12 text-gray-400">
-          <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p className="text-lg font-medium">No courses yet</p>
-          <p className="text-sm">Create your first course to get started</p>
+      {!loading && !loadFailed && courses.length > 0 && (
+        <div role="group" aria-label="Course view" className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            aria-pressed={viewMode === 'sections'}
+            onClick={() => setViewMode('sections')}
+            className={cx(VIEW_CHOICE_BASE, viewMode === 'sections' ? VIEW_CHOICE.on : VIEW_CHOICE.off)}
+          >
+            Sections View
+          </button>
+          <button
+            type="button"
+            aria-pressed={viewMode === 'list'}
+            onClick={() => setViewMode('list')}
+            className={cx(VIEW_CHOICE_BASE, viewMode === 'list' ? VIEW_CHOICE.on : VIEW_CHOICE.off)}
+          >
+            List View
+          </button>
         </div>
       )}
 
-      {/* Courses List */}
-      <div className="space-y-4">
-        {courses.map(course => {
-          const sections = getSectionsForCourse(course.id);
-          return (
-            <div key={course.id} className="bg-white rounded-xl shadow-sm border overflow-hidden">
-              <div className="p-6">
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-4">
-                  <div className="flex items-start space-x-4">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <span className="px-3 py-1 bg-indigo-100 text-indigo-600 rounded-full text-sm font-semibold">
-                          {course.code}
-                        </span>
-                        <h3 className="text-xl font-bold text-gray-900">{course.name}</h3>
-                        {!course.is_active && (
-                          <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">Inactive</span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                        <span className="flex items-center"><Users className="w-4 h-4 mr-1" />{course.student_count || 0} students</span>
-                        <span className="flex items-center"><Folder className="w-4 h-4 mr-1" />{(course.sections || []).length || sections.length} sections</span>
-                        <span className="flex items-center"><FileText className="w-4 h-4 mr-1" />{course.board_count || 0} boards</span>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteCourse(course.id)}
-                    className="text-gray-400 hover:text-red-500 self-start"
-                    title="Delete course"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap gap-3 mt-4">
-                  <button
-                    onClick={() => navigate(`/lecturer/boards?course=${course.id}`)}
-                    className="flex-1 min-w-[120px] px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition font-medium flex items-center justify-center space-x-2"
-                  >
-                    <Eye className="w-4 h-4" />
-                    <span>View Boards</span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/lecturer/analytics')}
-                    className="flex-1 min-w-[120px] px-4 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition font-medium flex items-center justify-center space-x-2"
-                  >
-                    <BarChart className="w-4 h-4" />
-                    <span>Analytics</span>
-                  </button>
-                  <button
-                    onClick={() => onNavigate('lecturer-templates', { courseId: course.id, courseName: course.code })}
-                    className="flex-1 min-w-[120px] px-4 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition font-medium flex items-center justify-center space-x-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>New Board</span>
-                  </button>
-                  <button
-                    onClick={() => { setShowSectionModal(course); setNewSectionName(''); setSectionError(''); }}
-                    className="flex-1 min-w-[120px] px-4 py-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition font-medium flex items-center justify-center space-x-2"
-                  >
-                    <Layers className="w-4 h-4" />
-                    <span>Sections</span>
-                  </button>
-                  <button
-                    onClick={() => setShowInviteModal(course)}
-                    className="flex-1 min-w-[120px] px-4 py-2 bg-teal-50 text-teal-600 rounded-lg hover:bg-teal-100 transition font-medium flex items-center justify-center space-x-2"
-                  >
-                    <Share2 className="w-4 h-4" />
-                    <span>Share</span>
-                  </button>
-                </div>
-              </div>
-
-              {viewMode === 'sections' && (() => {
-                const enrollmentSections = sections;
-                const definedSections = course.sections || [];
-                // Merge: show all defined sections + any enrollment-only sections
-                const allSectionNames = [...new Set([...definedSections, ...enrollmentSections.map(s => s.name)])].filter(n => n !== 'Unassigned');
-                const unassigned = enrollmentSections.find(s => s.name === 'Unassigned');
-                return (allSectionNames.length > 0 || unassigned) && (
-                  <div className="border-t border-gray-100 p-6 bg-gray-50">
-                    <h4 className="font-semibold text-gray-700 mb-4">Sections</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {allSectionNames.map((name, idx) => {
-                        const enrollData = enrollmentSections.find(s => s.name === name);
-                        const studentCount = enrollData ? enrollData.students : 0;
-                        return (
-                          <button
-                            key={idx}
-                            onClick={() => openSectionDetail(course, { name, students: studentCount, enrollments: enrollData?.enrollments || [] })}
-                            className="p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-indigo-400 hover:shadow-md transition text-left"
-                          >
-                            <p className="font-semibold text-gray-900 mb-1">Section {name}</p>
-                            <p className="text-sm text-gray-600">{studentCount} students</p>
-                            <div className="mt-3 flex items-center space-x-2">
-                              <div className="flex -space-x-2">
-                                {[...Array(Math.min(3, studentCount))].map((_, i) => (
-                                  <div key={i} className="w-6 h-6 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full border-2 border-white" />
-                                ))}
-                              </div>
-                              {studentCount > 3 && (
-                                <span className="text-xs text-gray-500">+{studentCount - 3}</span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                      {unassigned && (
-                        <button
-                          onClick={() => openSectionDetail(course, unassigned)}
-                          className="p-4 bg-white border-2 border-gray-200 rounded-lg hover:border-indigo-400 hover:shadow-md transition text-left"
-                        >
-                          <p className="font-semibold text-gray-900 mb-1">No Section</p>
-                          <p className="text-sm text-gray-600">{unassigned.students} students</p>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          );
-        })}
-      </div>
+      {body}
 
       {/* Section Details Modal */}
       {selectedSection && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-scaleIn">
-            <div className="flex justify-between items-center p-6 border-b flex-shrink-0">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">
-                  {selectedSection.section.name === 'Unassigned' ? 'No Section' : `Section ${selectedSection.section.name}`}
-                </h2>
-                <p className="text-gray-600">{selectedSection.course.name}</p>
-              </div>
-              <button onClick={() => setSelectedSection(null)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6 overflow-y-auto flex-1">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-indigo-50 rounded-lg p-4 text-center">
-                  <p className="text-2xl font-bold text-indigo-600">{selectedSection.section.students}</p>
-                  <p className="text-sm text-gray-600">Students</p>
-                </div>
-                <div className="bg-green-50 rounded-lg p-4 text-center">
-                  <p className="text-2xl font-bold text-green-600">{sectionBoardCount}</p>
-                  <p className="text-sm text-gray-600">Section Boards</p>
-                </div>
-              </div>
-              {selectedSection.section.enrollments?.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-3">Students in this Section</h3>
-                  <div className="space-y-2">
-                    {selectedSection.section.enrollments.map((enrollment) => {
-                      const name = enrollment.student_details
-                        ? `${enrollment.student_details.first_name || ''} ${enrollment.student_details.last_name || ''}`.trim() || enrollment.student_details.username
-                        : `User ${enrollment.student}`;
-                      return (
-                        <div key={enrollment.id} className="flex items-center space-x-3 text-sm text-gray-600 p-2 bg-gray-50 rounded">
-                          <Users className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                          <span className="font-medium">{name}</span>
-                          <span className="text-gray-400">{enrollment.student_details?.email || ''}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="p-6 border-t bg-gray-50 flex gap-3 flex-shrink-0 flex-wrap">
+        <ClassroomDialog
+          titleId="courses-section-title"
+          size="xl"
+          title={selectedSection.section.name === 'Unassigned' ? 'No Section' : `Section ${selectedSection.section.name}`}
+          subtitle={selectedSection.course.name}
+          onClose={() => setSelectedSection(null)}
+          footer={
+            <>
               {selectedSection.section.name !== 'Unassigned' && (
                 <>
-                  <button
-                    onClick={() => { navigate(`/lecturer/boards?course=${selectedSection.course.id}&section=${selectedSection.section.name}`); setSelectedSection(null); }}
-                    className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition"
-                  >
+                  <ClassroomButton variant="primary" className="flex-1" onClick={() => { navigate(`/lecturer/boards?course=${selectedSection.course.id}&section=${selectedSection.section.name}`); setSelectedSection(null); }}>
                     View Section Boards
-                  </button>
-                  <button
-                    onClick={() => { onNavigate('lecturer-templates', { courseId: selectedSection.course.id, courseName: selectedSection.course.code, section: selectedSection.section.name }); setSelectedSection(null); }}
-                    className="flex-1 bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition"
-                  >
+                  </ClassroomButton>
+                  <ClassroomButton className="flex-1" onClick={() => { onNavigate('lecturer-templates', { courseId: selectedSection.course.id, courseName: selectedSection.course.code, section: selectedSection.section.name }); setSelectedSection(null); }}>
                     Create Board
-                  </button>
+                  </ClassroomButton>
                 </>
               )}
               {selectedSection.section.name === 'Unassigned' && (
-                <button
-                  onClick={() => { navigate(`/lecturer/boards?course=${selectedSection.course.id}`); setSelectedSection(null); }}
-                  className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition"
-                >
+                <ClassroomButton variant="primary" className="flex-1" onClick={() => { navigate(`/lecturer/boards?course=${selectedSection.course.id}`); setSelectedSection(null); }}>
                   View Course Boards
-                </button>
+                </ClassroomButton>
               )}
-              <button onClick={() => setSelectedSection(null)} className="flex-1 border-2 border-gray-200 py-3 rounded-lg font-semibold hover:bg-gray-50 transition">
+              <ClassroomButton className="flex-1" onClick={() => setSelectedSection(null)}>
                 Close
-              </button>
+              </ClassroomButton>
+            </>
+          }
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <div className={cx(STAT_TILE, 'bg-accent-tint')}>
+              <p className="text-2xl font-semibold text-accent-700">{selectedSection.section.students}</p>
+              <p className="text-sm text-ink-2">Students</p>
+            </div>
+            <div className={cx(STAT_TILE, 'bg-success-tint')}>
+              <p className="text-2xl font-semibold text-success">{sectionBoardCount}</p>
+              <p className="text-sm text-ink-2">Section Boards</p>
             </div>
           </div>
-        </div>
+          {selectedSection.section.enrollments?.length > 0 && (
+            <div>
+              <h3 className="mb-3 font-semibold text-ink">Students in this Section</h3>
+              <ul className="space-y-2">
+                {selectedSection.section.enrollments.map((enrollment) => {
+                  const name = enrollment.student_details
+                    ? `${enrollment.student_details.first_name || ''} ${enrollment.student_details.last_name || ''}`.trim() || enrollment.student_details.username
+                    : `User ${enrollment.student}`;
+                  return (
+                    <li key={enrollment.id} className="flex min-h-[44px] flex-wrap items-center gap-x-3 gap-y-1 rounded border border-line bg-surface-hover p-2 text-sm text-ink-2">
+                      <Users className="h-4 w-4 flex-shrink-0 text-ink-2" strokeWidth={1.5} aria-hidden="true" />
+                      <span className="font-medium text-ink">{name}</span>
+                      <span className="break-all text-ink-2">{enrollment.student_details?.email || ''}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </ClassroomDialog>
       )}
 
       {/* Manage Sections Modal */}
       {showSectionModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md animate-scaleIn">
-            <div className="p-6 border-b">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">Manage Sections</h3>
-                  <p className="text-sm text-gray-500">{showSectionModal.code} - {showSectionModal.name}</p>
-                </div>
-                <button onClick={() => setShowSectionModal(null)} className="p-1 hover:bg-gray-100 rounded">
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
-              </div>
-            </div>
-            <div className="p-6 space-y-4">
-              {sectionError && <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{sectionError}</div>}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Add Section</label>
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={newSectionName}
-                    onChange={(e) => setNewSectionName(e.target.value)}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="e.g., A, B, Morning"
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddSection(showSectionModal); }}
-                  />
-                  <button
-                    onClick={() => handleAddSection(showSectionModal)}
-                    disabled={!newSectionName.trim()}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium disabled:opacity-50"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Current Sections</label>
-                {(showSectionModal.sections || []).length === 0 ? (
-                  <p className="text-sm text-gray-400">No sections defined yet</p>
-                ) : (
-                  <div className="space-y-2">
-                    {(showSectionModal.sections || []).map((sec) => {
-                      const enrollData = getSectionsForCourse(showSectionModal.id).find(s => s.name === sec);
-                      const count = enrollData ? enrollData.students : 0;
-                      return (
-                        <div key={sec} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div>
-                            <span className="font-medium text-gray-900">Section {sec}</span>
-                            <span className="text-sm text-gray-500 ml-2">({count} students)</span>
-                          </div>
-                          <button
-                            onClick={() => handleRemoveSection(showSectionModal, sec)}
-                            className="p-1 text-gray-400 hover:text-red-500 transition"
-                            title={count > 0 ? 'Cannot remove: has students' : 'Remove section'}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="p-6 border-t">
-              <button onClick={() => setShowSectionModal(null)} className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium">Done</button>
-            </div>
+        <ClassroomDialog
+          titleId="courses-sections-title"
+          title="Manage Sections"
+          subtitle={`${showSectionModal.code} - ${showSectionModal.name}`}
+          onClose={closeSectionModal}
+          footer={<ClassroomButton className="w-full" onClick={closeSectionModal}>Done</ClassroomButton>}
+        >
+          {sectionError && <ClassroomAlert>{sectionError}</ClassroomAlert>}
+          <div className="flex items-end gap-2">
+            <ClassroomField
+              className="min-w-0 flex-1"
+              label="Add Section"
+              value={newSectionName}
+              onChange={(e) => setNewSectionName(e.target.value)}
+              placeholder="e.g., A, B, Morning"
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddSection(showSectionModal); }}
+            />
+            <ClassroomButton
+              onClick={() => handleAddSection(showSectionModal)}
+              disabled={!newSectionName.trim()}
+            >
+              Add
+            </ClassroomButton>
           </div>
-        </div>
+          <section aria-labelledby="current-sections-heading">
+            <h3 id="current-sections-heading" className="mb-2 text-sm font-medium text-ink">Current Sections</h3>
+            {(showSectionModal.sections || []).length === 0 ? (
+              <p className="text-sm text-ink-2">No sections defined yet</p>
+            ) : (
+              <ul className="space-y-2">
+                {(showSectionModal.sections || []).map((sec) => {
+                  const enrollData = getSectionsForCourse(showSectionModal.id).find(s => s.name === sec);
+                  const count = enrollData ? enrollData.students : 0;
+                  const removeLabel = count > 0 ? 'Cannot remove: has students' : 'Remove section';
+                  return (
+                    <li key={sec} className="flex min-h-[44px] items-center justify-between gap-3 rounded border border-line bg-surface-hover px-3 py-2">
+                      <p>
+                        <span className="font-medium text-ink">Section {sec}</span>
+                        <span className="ml-2 text-sm text-ink-2">({count} students)</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSection(showSectionModal, sec)}
+                        className={ICON_BUTTON}
+                        title={removeLabel}
+                        aria-label={removeLabel}
+                      >
+                        <Trash2 className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        </ClassroomDialog>
       )}
 
       {/* Add Course Modal */}
       {showAddCourseModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md animate-scaleIn">
-            <div className="p-6 border-b">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-gray-900">Add New Course</h3>
-                <button onClick={() => { setShowAddCourseModal(false); setCourseError(''); }} className="p-1 hover:bg-gray-100 rounded">
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
-              </div>
-            </div>
-            <div className="p-6 space-y-4">
-              {courseError && <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{courseError}</div>}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Course Code</label>
-                <input
-                  type="text" value={newCourse.code}
-                  onChange={(e) => setNewCourse({ ...newCourse, code: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="e.g., CS101"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Course Name</label>
-                <input
-                  type="text" value={newCourse.name}
-                  onChange={(e) => setNewCourse({ ...newCourse, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="e.g., Introduction to Programming"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
-                <textarea
-                  value={newCourse.description}
-                  onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  rows={2} placeholder="Brief course description..."
-                />
-              </div>
-            </div>
-            <div className="p-6 border-t flex space-x-3">
-              <button onClick={() => { setShowAddCourseModal(false); setCourseError(''); }} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium">Cancel</button>
-              <button
+        <ClassroomDialog
+          titleId="courses-add-title"
+          title="Add New Course"
+          onClose={closeAddCourseModal}
+          footer={
+            <>
+              <ClassroomButton className="flex-1" onClick={closeAddCourseModal}>Cancel</ClassroomButton>
+              <ClassroomButton
+                variant="primary"
+                className="flex-1"
                 onClick={handleAddCourse}
                 disabled={addingCourse || !newCourse.code || !newCourse.name}
-                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium disabled:opacity-50"
               >
                 {addingCourse ? 'Creating...' : 'Add Course'}
-              </button>
-            </div>
-          </div>
-        </div>
+              </ClassroomButton>
+            </>
+          }
+        >
+          {courseError && <ClassroomAlert>{courseError}</ClassroomAlert>}
+          <ClassroomField
+            label="Course Code"
+            value={newCourse.code}
+            onChange={(e) => setNewCourse({ ...newCourse, code: e.target.value })}
+            placeholder="e.g., CS101"
+          />
+          <ClassroomField
+            label="Course Name"
+            value={newCourse.name}
+            onChange={(e) => setNewCourse({ ...newCourse, name: e.target.value })}
+            placeholder="e.g., Introduction to Programming"
+          />
+          <ClassroomField
+            as="textarea"
+            rows={2}
+            label="Description (optional)"
+            value={newCourse.description}
+            onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
+            placeholder="Brief course description..."
+          />
+        </ClassroomDialog>
       )}
 
       {/* Course Invite Modal */}
@@ -596,6 +586,6 @@ export default function LecturerCoursesPage({ onNavigate }) {
           }}
         />
       )}
-    </>
+    </div>
   );
 }

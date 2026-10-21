@@ -9,7 +9,7 @@ export default function QuizTemplatePage({ onNavigate }) {
       templateId="quiz"
       templateName="Quiz"
       templateDescription="Interactive quizzes with timed questions, scoring, and leaderboard"
-      templateColor="rose"
+      templateColor="orange"
       TemplateIcon={HelpCircle}
     />
   );

@@ -5,15 +5,31 @@ import { useAuth } from '../../contexts/AuthContext';
 import BlockRenderer from './BlockRenderer';
 import CommentThread from './CommentThread';
 import AddBlockMenu from './AddBlockMenu';
+import { StickyNote as EmptyNote } from '../classroom';
 
-
+// Section panels stay white. Only the icon carries the section's label colour.
 const SECTION_STYLES = {
-  'My Ideas': { bg: 'bg-yellow-50', border: 'border-yellow-200', title: 'text-yellow-800', icon: Lightbulb },
-  'Questions': { bg: 'bg-blue-50', border: 'border-blue-200', title: 'text-blue-800', icon: HelpCircle },
-  'Key Points': { bg: 'bg-green-50', border: 'border-green-200', title: 'text-green-800', icon: Key },
-  'References': { bg: 'bg-purple-50', border: 'border-purple-200', title: 'text-purple-800', icon: Link2 },
-  'Shared Notes': { bg: 'bg-indigo-50', border: 'border-indigo-200', title: 'text-indigo-800', icon: Share2 },
+  'My Ideas': { tone: 'text-amber-700', icon: Lightbulb },
+  'Questions': { tone: 'text-accent', icon: HelpCircle },
+  'Key Points': { tone: 'text-green-700', icon: Key },
+  'References': { tone: 'text-teal-700', icon: Link2 },
+  'Shared Notes': { tone: 'text-accent', icon: Share2 },
 };
+const DEFAULT_STYLE = { tone: 'text-ink-2', icon: Lightbulb };
+
+// Empty-state copy per section. A section without a hint shows nothing extra.
+const EMPTY_HINT = {
+  'My Ideas': 'Jot down your brainstorming ideas here...',
+  'Questions': 'Write questions you want to ask your lecturer...',
+  'Key Points': 'Summarize the key takeaways here...',
+  'References': 'Add links, files, and resources...',
+  'Shared Notes': 'Add notes you want to share with your lecturer...',
+};
+
+// Hand font only for short section titles (under 40 characters).
+const titleFont = (title) => ((title || '').length < 40 ? 'font-hand text-lg' : 'text-base font-semibold');
+
+const SECTION = 'rounded-xl border border-line border-t-2 border-t-wood bg-surface p-6';
 
 export default function StudentNotesBoard() {
   const {
@@ -47,16 +63,14 @@ export default function StudentNotesBoard() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
       {board.sections.map((section) => {
-        const style = SECTION_STYLES[section.title] || { bg: 'bg-gray-50', border: 'border-gray-200', title: 'text-gray-800', icon: Lightbulb };
+        const style = SECTION_STYLES[section.title] || DEFAULT_STYLE;
         const SectionIcon = style.icon;
+        const hint = EMPTY_HINT[section.title];
 
         return (
-          <div
-            key={section.id}
-            className={`${style.bg} border ${style.border} rounded-xl p-6`}
-          >
-            <h2 className={`text-lg font-bold ${style.title} mb-4 flex items-center space-x-2`}>
-              <SectionIcon className="w-5 h-5" />
+          <div key={section.id} className={SECTION}>
+            <h2 className={`mb-4 flex items-center gap-2 text-ink ${titleFont(section.title)}`}>
+              <SectionIcon className={`h-5 w-5 flex-shrink-0 ${style.tone}`} strokeWidth={1.5} aria-hidden="true" />
               <span>{section.title}</span>
             </h2>
 
@@ -80,14 +94,8 @@ export default function StudentNotesBoard() {
                 </div>
               ))}
 
-              {section.blocks.length === 0 && (
-                <p className="text-sm text-gray-400 italic">
-                  {section.title === 'My Ideas' && 'Jot down your brainstorming ideas here...'}
-                  {section.title === 'Questions' && 'Write questions you want to ask your lecturer...'}
-                  {section.title === 'Key Points' && 'Summarize the key takeaways here...'}
-                  {section.title === 'References' && 'Add links, files, and resources...'}
-                  {section.title === 'Shared Notes' && 'Add notes you want to share with your lecturer...'}
-                </p>
+              {section.blocks.length === 0 && hint && (
+                <EmptyNote as="p" color="azure" className="text-sm">{hint}</EmptyNote>
               )}
             </div>
 

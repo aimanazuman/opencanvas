@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import {
   Plus, Type, ImageIcon, Video, File,
   Music, Link2, StickyNote, Megaphone, FolderOpen, BarChart3, MonitorPlay
@@ -9,6 +9,11 @@ import {
   createAudioBlock, createLinkEmbedBlock, createPersonalNoteBlock,
   createAnnouncementBlock, createResourceLibraryBlock, createProgressTrackerBlock, createGoogleMeetBlock,
 } from '../../utils/boardHelpers';
+import Button from '../ui/Button';
+
+// Static class strings: Tailwind only sees literal class names.
+const MENU = 'absolute left-0 top-full z-40 mt-1 max-h-80 w-56 overflow-y-auto rounded-lg border border-line bg-surface p-1 shadow-pop motion-safe:animate-oc-fade-in';
+const ITEM = 'flex w-full items-center gap-3 rounded px-2 py-2 text-left hover:bg-surface-hover';
 
 const BLOCK_OPTIONS = [
   { type: BLOCK_TYPES.TEXT, icon: Type, label: 'Text', description: 'Add a text block' },
@@ -27,6 +32,8 @@ const BLOCK_OPTIONS = [
 export default function AddBlockMenu({ onAddBlock, userRole, currentUserId }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
+  const triggerRef = useRef(null);
+  const menuId = useId();
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -37,6 +44,14 @@ export default function AddBlockMenu({ onAddBlock, userRole, currentUserId }) {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  // Escape closes the menu. Focus returns to the trigger only when it was inside the menu.
+  const handleKeyDown = (e) => {
+    if (e.key !== 'Escape' || !open) return;
+    const focusInside = menuRef.current && menuRef.current.contains(document.activeElement);
+    setOpen(false);
+    if (focusInside && triggerRef.current) triggerRef.current.focus();
+  };
 
   const handleSelect = (type) => {
     let block;
@@ -90,28 +105,32 @@ export default function AddBlockMenu({ onAddBlock, userRole, currentUserId }) {
   });
 
   return (
-    <div className="relative" ref={menuRef}>
-      <button
+    <div className="relative" ref={menuRef} onKeyDown={handleKeyDown}>
+      <Button
+        ref={triggerRef}
+        variant="secondary"
+        icon={Plus}
         onClick={() => setOpen(!open)}
-        className="flex items-center space-x-1 px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg border border-dashed border-indigo-300 transition"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
       >
-        <Plus className="w-4 h-4" />
-        <span>Add content</span>
-      </button>
+        Add content
+      </Button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-xl border py-1 z-40 w-56 max-h-80 overflow-y-auto animate-slideDown">
+        <div id={menuId} className={MENU}>
           {visibleOptions.map((option) => (
             <button
               key={option.type}
+              type="button"
               onClick={() => handleSelect(option.type)}
-              className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-center space-x-3"
+              className={ITEM}
             >
-              <option.icon className="w-4 h-4 text-gray-500 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-gray-900">{option.label}</p>
-                <p className="text-xs text-gray-500">{option.description}</p>
-              </div>
+              <option.icon className="h-4 w-4 flex-none text-ink-2" strokeWidth={1.5} aria-hidden="true" />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-ink">{option.label}</span>
+                <span className="block text-xs text-ink-3">{option.description}</span>
+              </span>
             </button>
           ))}
         </div>

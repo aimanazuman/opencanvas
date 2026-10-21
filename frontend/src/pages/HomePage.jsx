@@ -1,426 +1,419 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import {
   Layout, BookOpen, ArrowRight, Calendar, Columns,
-  GraduationCap, Shield, Share2, Lightbulb, Users,
-  Zap, Lock, Globe, ChevronRight, HelpCircle
+  Shield, Share2, Lightbulb, Users,
+  Lock, Globe, ChevronRight, HelpCircle, Bell, Pencil, Apple, Backpack, Check
 } from 'lucide-react';
+import useScrollReveal from '../hooks/useScrollReveal';
+import {
+  ClassroomShell, ChalkboardHeader, WoodFrame, PaperPanel, StickyNote, CorkBoard, TimetableGrid,
+} from '../components/classroom';
 
-// Hook: observe elements with .scroll-reveal and add .is-visible when in viewport
-function useScrollReveal() {
-  const containerRef = useRef(null);
-  useEffect(() => {
-    const root = containerRef.current;
-    if (!root) return;
-    const elements = root.querySelectorAll('.scroll-reveal');
-    if (!elements.length) return;
+const STATS = [
+  { value: '5+', label: 'Board Templates' },
+  { value: '3', label: 'User Roles' },
+  { value: '100%', label: 'Free to Use' },
+];
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('is-visible');
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
-    );
-    elements.forEach(el => observer.observe(el));
-    return () => observer.disconnect();
-  }, []);
-  return containerRef;
-}
+const FEATURES = [
+  { icon: Share2, title: 'Share & Collaborate', desc: 'Invite members with view, edit, or comment permissions. Share boards via invite links.', tone: 'bg-accent-50 text-accent-700' },
+  { icon: Lock, title: 'Role-Based Access', desc: 'Students, lecturers, and admins each have dedicated portals and appropriate permissions.', tone: 'bg-green-50 text-green-700' },
+  { icon: BookOpen, title: 'Course Management', desc: 'Create courses, manage enrollment, and organize boards by class or subject.', tone: 'bg-accent-50 text-accent-700' },
+  { icon: Users, title: 'Guest Access', desc: 'Try the platform instantly with guest mode. Convert to a full account any time.', tone: 'bg-amber-50 text-amber-800' },
+  { icon: Shield, title: 'Admin Dashboard', desc: 'Complete admin panel with user management, storage monitoring, and audit logs.', tone: 'bg-teal-50 text-teal-700' },
+  { icon: Globe, title: 'Version History', desc: 'Track changes with up to 50 versions per board. Restore any previous version instantly.', tone: 'bg-teal-50 text-teal-700' },
+];
+
+// Sticky notes pinned to the corkboard. `color` keys into the StickyNote colour map.
+const TEMPLATES = [
+  { icon: BookOpen, name: 'Course Material', desc: 'Structured content with sections for topics, resources, and notes.', badge: 'Lecturers', color: 'azure' },
+  { icon: Lightbulb, name: 'Student Notes', desc: 'Brainstorm with ideas, questions, key points, and references.', badge: 'Students', color: 'amber' },
+  { icon: Calendar, name: 'Study Planner', desc: 'Weekly timetable with goals, navigation, and copy-to-next-week.', badge: 'All Roles', color: 'green' },
+  { icon: Columns, name: 'Kanban Board', desc: 'Column-based task management with media cards.', badge: 'All Roles', color: 'teal' },
+  { icon: HelpCircle, name: 'Quiz Board', desc: 'Interactive quizzes with MCQ, true/false, and fill-in-the-blank.', badge: 'Lecturers', color: 'orange' },
+];
+
+// Timetable cell fills. Literal class names so Tailwind keeps them.
+const NOTE_CELL = {
+  azure: 'bg-note-azure',
+  amber: 'bg-note-amber',
+  green: 'bg-note-green',
+  teal: 'bg-note-teal',
+  orange: 'bg-note-orange',
+};
+
+// Example week: each cell reuses a template name and its note colour.
+const TIMETABLE_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+const cell = (tmpl) => ({ label: tmpl.name, className: NOTE_CELL[tmpl.color] });
+const TIMETABLE_ROWS = [
+  { label: 'Period 1', cells: [TEMPLATES[0], TEMPLATES[1], TEMPLATES[4], TEMPLATES[3], TEMPLATES[2]].map(cell) },
+  { label: 'Period 2', cells: [TEMPLATES[2], TEMPLATES[3], TEMPLATES[0], TEMPLATES[1], TEMPLATES[4]].map(cell) },
+  { label: 'Period 3', cells: [TEMPLATES[4], TEMPLATES[2], TEMPLATES[1], TEMPLATES[0], TEMPLATES[3]].map(cell) },
+];
+
+const ROLES = [
+  {
+    icon: Backpack,
+    title: 'Student',
+    tick: 'text-accent-600',
+    features: ['Create and manage boards', 'Enroll in courses', 'Collaborate with classmates', 'Take interactive quizzes'],
+  },
+  {
+    icon: BookOpen,
+    title: 'Lecturer',
+    tick: 'text-green-700',
+    features: ['Create courses and enroll students', 'Build course materials and quizzes', 'Dedicated lecturer portal', 'Bulk import students'],
+  },
+  {
+    icon: Shield,
+    title: 'Admin',
+    tick: 'text-teal-700',
+    features: ['Full system dashboard', 'User and storage management', 'System settings configuration', 'Audit logs and monitoring'],
+  },
+];
+
+const FOCUS_ON_DARK = 'focus-visible:outline-white';
 
 function HomePage({ onNavigate }) {
-  const revealRef = useScrollReveal();
+  const revealRef = useScrollReveal({ threshold: 0.12 });
   return (
-    <div ref={revealRef} className="min-h-screen bg-white">
+    <ClassroomShell ref={revealRef}>
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:text-ink focus:shadow-pop"
+      >
+        Skip to content
+      </a>
+
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-100 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <Layout className="h-8 w-8 text-indigo-600" />
-            <span className="text-2xl font-bold text-gray-900">OpenCanvas</span>
+      <header className="sticky top-0 z-30 border-b border-line bg-surface">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
+          <div className="flex items-center gap-2">
+            <Layout className="h-6 w-6 text-accent-600" strokeWidth={1.5} aria-hidden="true" />
+            <span className="text-xl font-semibold text-ink">OpenCanvas</span>
           </div>
-          <nav className="hidden md:flex items-center space-x-8">
-            <a href="#features" className="text-sm text-gray-600 hover:text-gray-900 transition">Features</a>
-            <a href="#templates" className="text-sm text-gray-600 hover:text-gray-900 transition">Templates</a>
-            <a href="#roles" className="text-sm text-gray-600 hover:text-gray-900 transition">Roles</a>
-            <button
-              onClick={() => onNavigate('about')}
-              className="text-sm text-gray-600 hover:text-gray-900 transition">
+          <nav aria-label="Page sections" className="hidden items-center gap-7 md:flex">
+            <a href="#features" className="text-sm text-ink-2 hover:text-ink">Features</a>
+            <a href="#templates" className="text-sm text-ink-2 hover:text-ink">Templates</a>
+            <a href="#roles" className="text-sm text-ink-2 hover:text-ink">Roles</a>
+            <button type="button" onClick={() => onNavigate('about')} className="text-sm text-ink-2 hover:text-ink">
               About
             </button>
           </nav>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => onNavigate('login')}
-              className="text-sm text-gray-700 hover:text-gray-900 font-medium transition hidden sm:block">
+              className="btn-motion hidden h-8 px-2 text-sm font-medium text-ink hover:text-accent-700 sm:block"
+            >
               Sign In
             </button>
             <button
+              type="button"
               onClick={() => onNavigate('signup')}
-              className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition">
+              className="btn-motion h-9 rounded bg-accent px-4 text-sm font-medium text-white hover:bg-accent-hover"
+            >
               Get Started
             </button>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-white to-purple-50" />
-        <div className="absolute top-20 left-10 w-72 h-72 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" />
-        <div className="absolute bottom-20 right-10 w-72 h-72 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" />
+      <main id="main">
+        {/* Hero: a chalkboard on a wood frame, with a marker tray and a bell-schedule strip */}
+        <section aria-labelledby="hero-title" className="px-4 pb-12 pt-8 md:pb-16 md:pt-14">
+          <div className="mx-auto max-w-5xl">
+            <ChalkboardHeader
+              size="hero"
+              titleId="hero-title"
+              enter
+              tray
+              eyebrow={
+                <p className="inline-flex h-6 items-center gap-2 rounded-sm border border-chalk-dust/40 px-2.5 text-xs font-medium text-chalk-dust">
+                  <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+                  <span>Educational Collaborative Platform</span>
+                </p>
+              }
+              title={
+                <>
+                  Where Learning Meets{' '}
+                  <span className="relative inline-block whitespace-nowrap">
+                    Collaboration
+                    <span aria-hidden="true" className="absolute -bottom-1.5 left-0 right-0 block h-1 origin-left motion-safe:animate-oc-draw">
+                      <span className="block h-full w-full rounded-full bg-note-amber motion-safe:animate-oc-breathe" />
+                    </span>
+                  </span>
+                </>
+              }
+              subtitle="A whiteboard platform built for academic institutions. Create, Share, and Collaborate on boards with purpose-built templates."
+              actions={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('signup')}
+                    className={`btn-motion inline-flex h-11 items-center gap-2 rounded bg-paper px-6 font-semibold text-accent-700 hover:bg-note-azure ${FOCUS_ON_DARK}`}
+                  >
+                    <span>Get Started Free</span>
+                    <ArrowRight className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('about')}
+                    className={`btn-motion inline-flex h-11 items-center gap-2 rounded border border-chalk-dust/60 px-6 font-medium text-chalk-ink hover:bg-chalk-deep ${FOCUS_ON_DARK}`}
+                  >
+                    <span>Learn More</span>
+                    <ChevronRight className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                  </button>
+                </>
+              }
+            />
 
-        <div className="relative max-w-7xl mx-auto px-4 py-20 md:py-28">
-          <div className="text-center max-w-4xl mx-auto">
-            <div className="inline-flex items-center space-x-2 bg-indigo-100 text-indigo-700 px-4 py-1.5 rounded-full text-sm font-medium mb-6">
-              <Zap className="w-4 h-4" />
-              <span>Educational Collaborative Platform</span>
+            {/* Bell-schedule strip with the stats */}
+            <ul className="mx-auto mt-8 grid max-w-3xl grid-cols-3 gap-px overflow-hidden rounded-lg border border-line bg-line">
+              {STATS.map((stat, idx) => (
+                <li key={stat.label} className="bg-surface px-2 py-3 text-center md:px-4 md:py-4">
+                  <p aria-hidden="true" className="flex items-center justify-center gap-1.5 text-2xs font-medium uppercase tracking-[0.04em] text-ink-2">
+                    <Bell className="h-3 w-3" strokeWidth={1.5} />
+                    <span>Period {idx + 1}</span>
+                  </p>
+                  <p className="mt-1 text-xl font-semibold text-accent-600 md:text-3xl">{stat.value}</p>
+                  <p className="mt-0.5 text-xs text-ink-2 md:text-sm">{stat.label}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        {/* Features: notebook paper with a red margin */}
+        <PaperPanel
+          as="section"
+          id="features"
+          aria-labelledby="features-title"
+          ruled
+          margin
+          flat
+          padded={false}
+          className="scroll-mt-16 py-16 md:py-20"
+        >
+          <div className="mx-auto max-w-5xl pl-14 pr-4 md:px-4 md:pl-16">
+            <div className="scroll-reveal mb-10 md:mb-12">
+              <h2 id="features-title" className="font-hand text-3xl text-ink md:text-4xl">
+                Everything You Need to Collaborate
+              </h2>
+              <p className="mt-3 max-w-2xl text-ink-2">
+                Purpose-built features that make learning and teaching more interactive and engaging.
+              </p>
             </div>
 
-            <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-              Where Learning Meets
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">
-                {' '}Collaboration
-              </span>
-            </h1>
-
-            <p className="text-lg md:text-xl text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed">
-              A whiteboard platform built for academic institutions. Create, Share, and Collaborate on
-              boards with purpose-built templates.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button
-                onClick={() => onNavigate('signup')}
-                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-3.5 rounded-xl text-lg font-semibold hover:shadow-lg hover:shadow-indigo-200 transition-all inline-flex items-center space-x-2"
-              >
-                <span>Get Started Free</span>
-                <ArrowRight className="h-5 w-5" />
-              </button>
-              <button
-                onClick={() => onNavigate('about')}
-                className="text-gray-700 px-8 py-3.5 rounded-xl text-lg font-medium hover:bg-gray-100 transition inline-flex items-center space-x-2 border border-gray-200"
-              >
-                <span>Learn More</span>
-                <ChevronRight className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Stats */}
-            <div className="mt-16 grid grid-cols-3 gap-8 max-w-lg mx-auto">
-              {[
-                { value: '5+', label: 'Board Templates' },
-                { value: '3', label: 'User Roles' },
-                { value: '100%', label: 'Free to Use' },
-              ].map((stat, idx) => (
-                <div key={idx} className="text-center">
-                  <p className="text-2xl md:text-3xl font-bold text-indigo-600">{stat.value}</p>
-                  <p className="text-sm text-gray-500 mt-1">{stat.label}</p>
+            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+              {FEATURES.map((feature, idx) => (
+                <div key={feature.title} className={`scroll-reveal reveal-delay-${(idx % 3) + 1}`}>
+                  <div className="lift h-full rounded-lg border border-line bg-surface p-5 md:p-6">
+                    <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded ${feature.tone}`}>
+                      <feature.icon className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" />
+                    </div>
+                    <h3 className="mb-2 text-lg font-semibold text-ink">{feature.title}</h3>
+                    <p className="text-sm leading-relaxed text-ink-2">{feature.desc}</p>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-      </section>
+        </PaperPanel>
 
-      {/* Features */}
-      <section id="features" className="py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="text-center mb-14 scroll-reveal">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Everything You Need to Collaborate
-            </h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Purpose-built features that make learning and teaching more interactive and engaging.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              {
-                icon: Share2,
-                title: 'Share & Collaborate',
-                desc: 'Invite members with view, edit, or comment permissions. Share boards via invite links.',
-                color: 'indigo',
-              },
-              {
-                icon: Lock,
-                title: 'Role-Based Access',
-                desc: 'Students, lecturers, and admins each have dedicated portals and appropriate permissions.',
-                color: 'green',
-              },
-              {
-                icon: BookOpen,
-                title: 'Course Management',
-                desc: 'Create courses, manage enrollment, and organize boards by class or subject.',
-                color: 'blue',
-              },
-              {
-                icon: Users,
-                title: 'Guest Access',
-                desc: 'Try the platform instantly with guest mode. Convert to a full account any time.',
-                color: 'amber',
-              },
-              {
-                icon: Shield,
-                title: 'Admin Dashboard',
-                desc: 'Complete admin panel with user management, storage monitoring, and audit logs.',
-                color: 'purple',
-              },
-              {
-                icon: Globe,
-                title: 'Version History',
-                desc: 'Track changes with up to 50 versions per board. Restore any previous version instantly.',
-                color: 'teal',
-              },
-            ].map((feature, idx) => {
-              const colorMap = {
-                indigo: 'bg-indigo-100 text-indigo-600',
-                green: 'bg-green-100 text-green-600',
-                blue: 'bg-blue-100 text-blue-600',
-                amber: 'bg-amber-100 text-amber-600',
-                purple: 'bg-purple-100 text-purple-600',
-                teal: 'bg-teal-100 text-teal-600',
-              };
-              return (
-                <div key={idx} className={`scroll-reveal stagger-${idx + 1} bg-white p-6 rounded-xl border border-gray-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300 group`}>
-                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 ${colorMap[feature.color]} group-hover:scale-110 transition-transform duration-300`}>
-                    <feature.icon className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                  <p className="text-gray-600 text-sm leading-relaxed">{feature.desc}</p>
+        {/* Board templates: sticky notes pinned to a corkboard strip */}
+        <CorkBoard
+          as="section"
+          id="templates"
+          aria-labelledby="templates-title"
+          layout="five"
+          className="scroll-mt-16"
+          header={
+            <div className="scroll-reveal mb-12 text-center">
+              <h2 id="templates-title" className="font-hand text-3xl text-ink md:text-4xl">
+                Ready-Made Board Templates
+              </h2>
+              <p className="mx-auto mt-3 max-w-2xl text-ink">
+                Start with a template designed for your workflow, or create from scratch.
+              </p>
+            </div>
+          }
+        >
+          {TEMPLATES.map((tmpl, idx) => (
+            <li key={tmpl.name} className={`scroll-reveal reveal-delay-${(idx % 3) + 1}`}>
+              <StickyNote
+                as="article"
+                color={tmpl.color}
+                rotate={idx % 2 === 0 ? -2 : 2}
+                decorative
+                pinned
+                spacious
+                className="lift h-full"
+              >
+                <tmpl.icon className="mb-3 h-6 w-6 text-ink" strokeWidth={1.5} aria-hidden="true" />
+                <h3 className="text-base font-semibold text-ink">{tmpl.name}</h3>
+                <p className="mb-4 mt-1 text-sm leading-relaxed text-ink-2">{tmpl.desc}</p>
+                <div className="mt-auto">
+                  <span className="inline-flex h-5 items-center rounded-sm bg-chalk-board px-1.5 text-2xs font-medium text-chalk-ink">
+                    {tmpl.badge}
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
+              </StickyNote>
+            </li>
+          ))}
+        </CorkBoard>
 
-      {/* Board Templates */}
-      <section id="templates" className="py-20">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="text-center mb-14 scroll-reveal">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Ready-Made Board Templates
+        {/* Timetable grid */}
+        <section aria-labelledby="week-title" className="px-4 py-16 md:py-20">
+          <div className="scroll-reveal mx-auto max-w-4xl">
+            <h2 id="week-title" className="text-center font-hand text-3xl text-ink md:text-4xl">
+              A week on the board
             </h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Start with a template designed for your workflow, or create from scratch.
+            <p className="mx-auto mt-3 max-w-xl text-center text-ink-2">
+              Plan lessons, quizzes and study sessions on one weekly timetable.
             </p>
+            <TimetableGrid
+              className="mt-8"
+              caption="Example weekly timetable built from board templates"
+              corner={
+                <>
+                  <span className="sr-only">Period</span>
+                  <Bell className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+                </>
+              }
+              columns={TIMETABLE_DAYS}
+              rows={TIMETABLE_ROWS}
+            />
           </div>
+        </section>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-5">
-            {[
-              {
-                icon: BookOpen,
-                name: 'Course Material',
-                desc: 'Structured content with sections for topics, resources, and notes.',
-                badge: 'Lecturers',
-                gradient: 'from-indigo-500 to-blue-600',
-                bg: 'bg-indigo-50',
-              },
-              {
-                icon: Lightbulb,
-                name: 'Student Notes',
-                desc: 'Brainstorm with ideas, questions, key points, and references.',
-                badge: 'Students',
-                gradient: 'from-amber-500 to-orange-600',
-                bg: 'bg-amber-50',
-              },
-              {
-                icon: Calendar,
-                name: 'Study Planner',
-                desc: 'Weekly timetable with goals, navigation, and copy-to-next-week.',
-                badge: 'All Roles',
-                gradient: 'from-green-500 to-emerald-600',
-                bg: 'bg-green-50',
-              },
-              {
-                icon: Columns,
-                name: 'Kanban Board',
-                desc: 'Column-based task management with media cards.',
-                badge: 'All Roles',
-                gradient: 'from-purple-500 to-violet-600',
-                bg: 'bg-purple-50',
-              },
-              {
-                icon: HelpCircle,
-                name: 'Quiz Board',
-                desc: 'Interactive quizzes with MCQ, true/false, and fill-in-the-blank.',
-                badge: 'Lecturers',
-                gradient: 'from-blue-500 to-cyan-600',
-                bg: 'bg-blue-50',
-              },
-            ].map((tmpl, idx) => (
-              <div key={idx} className={`scroll-reveal stagger-${idx + 1} ${tmpl.bg} rounded-xl p-5 border border-gray-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300`}>
-                <div className={`w-11 h-11 rounded-lg bg-gradient-to-r ${tmpl.gradient} flex items-center justify-center mb-3`}>
-                  <tmpl.icon className="w-5 h-5 text-white" />
-                </div>
-                <h4 className="font-semibold text-gray-900 mb-1">{tmpl.name}</h4>
-                <p className="text-sm text-gray-600 mb-3 leading-relaxed">{tmpl.desc}</p>
-                <span className="inline-block text-xs font-medium bg-white px-2.5 py-1 rounded-full text-gray-600 border border-gray-200">
-                  {tmpl.badge}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+        {/* Roles: chalkboard headers on class cards */}
+        <section id="roles" aria-labelledby="roles-title" className="scroll-mt-16 px-4 pb-16 md:pb-20">
+          <div className="mx-auto max-w-6xl">
+            <div className="scroll-reveal mb-12 text-center">
+              <h2 id="roles-title" className="font-hand text-3xl text-ink md:text-4xl">
+                Built for Every Role
+              </h2>
+              <p className="mx-auto mt-3 max-w-2xl text-ink-2">
+                Dedicated portals and permissions for students, lecturers, and administrators.
+              </p>
+            </div>
 
-      {/* Roles */}
-      <section id="roles" className="py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="text-center mb-14 scroll-reveal">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Built for Every Role
-            </h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Dedicated portals and permissions for students, lecturers, and administrators.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {[
-              {
-                icon: GraduationCap,
-                title: 'Student',
-                color: 'blue',
-                features: ['Create and manage boards', 'Enroll in courses', 'Collaborate with classmates', 'Take interactive quizzes'],
-              },
-              {
-                icon: BookOpen,
-                title: 'Lecturer',
-                color: 'green',
-                features: ['Create courses and enroll students', 'Build course materials and quizzes', 'Dedicated lecturer portal', 'Bulk import students'],
-              },
-              {
-                icon: Shield,
-                title: 'Admin',
-                color: 'purple',
-                features: ['Full system dashboard', 'User and storage management', 'System settings configuration', 'Audit logs and monitoring'],
-              },
-            ].map((role, idx) => {
-              const colors = {
-                blue: { bg: 'bg-blue-600', light: 'bg-blue-50', text: 'text-blue-600', dot: 'bg-blue-400' },
-                green: { bg: 'bg-green-600', light: 'bg-green-50', text: 'text-green-600', dot: 'bg-green-400' },
-                purple: { bg: 'bg-purple-600', light: 'bg-purple-50', text: 'text-purple-600', dot: 'bg-purple-400' },
-              };
-              const c = colors[role.color];
-              return (
-                <div key={idx} className={`scroll-reveal stagger-${idx + 1} bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md hover:-translate-y-1 transition-all duration-300`}>
-                  <div className={`${c.bg} p-6 text-white`}>
-                    <role.icon className="w-10 h-10 mb-2" />
-                    <h3 className="text-xl font-bold">{role.title}</h3>
-                  </div>
-                  <div className="p-6">
-                    <ul className="space-y-3">
-                      {role.features.map((f, i) => (
-                        <li key={i} className="flex items-center space-x-3 text-sm text-gray-700">
-                          <span className={`w-2 h-2 rounded-full ${c.dot} flex-shrink-0`} />
+            <div className="grid gap-6 md:grid-cols-3">
+              {ROLES.map((role, idx) => (
+                <div key={role.title} className={`scroll-reveal h-full reveal-delay-${idx + 1}`}>
+                  <div className="lift flex h-full flex-col overflow-hidden rounded-lg border border-line bg-surface">
+                    <div className="chalkboard flex items-center gap-3 px-5 py-4">
+                      <role.icon className="h-6 w-6 text-chalk-ink" strokeWidth={1.5} aria-hidden="true" />
+                      <h3 className="font-hand text-2xl text-chalk-ink">{role.title}</h3>
+                    </div>
+                    <ul className="flex flex-1 flex-col gap-3 p-5">
+                      {role.features.map((f) => (
+                        <li key={f} className="flex items-start gap-2.5 text-sm text-ink">
+                          <Check className={`mt-0.5 h-4 w-4 flex-shrink-0 ${role.tick}`} strokeWidth={1.5} aria-hidden="true" />
                           <span>{f}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <div className="scroll-reveal bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-10 md:p-14 text-white">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Start Collaborating Today
-            </h2>
-            <p className="text-indigo-100 mb-8 max-w-xl mx-auto text-lg">
-              Create an account or try as a guest. No credit card required.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button
-                onClick={() => onNavigate('signup')}
-                className="bg-white text-indigo-600 px-8 py-3.5 rounded-xl font-semibold hover:bg-gray-100 transition inline-flex items-center space-x-2"
-              >
-                <span>Create Free Account</span>
-                <ArrowRight className="h-5 w-5" />
-              </button>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400">
-        <div className="max-w-7xl mx-auto px-4 py-12">
-          <div className="grid md:grid-cols-4 gap-8">
-            {/* Brand */}
-            <div className="md:col-span-2">
-              <div className="flex items-center space-x-2 mb-4">
-                <Layout className="h-7 w-7 text-indigo-400" />
-                <span className="text-xl font-bold text-white">OpenCanvas</span>
+        {/* CTA on the chalkboard */}
+        <section aria-labelledby="cta-title" className="px-4 pb-16 md:pb-20">
+          <div className="scroll-reveal mx-auto max-w-4xl">
+            <WoodFrame>
+              <div className="chalkboard rounded-sm px-6 py-12 text-center md:px-14 md:py-14">
+                <Apple className="mx-auto mb-4 h-7 w-7 text-note-amber" strokeWidth={1.5} aria-hidden="true" />
+                <h2 id="cta-title" className="font-hand text-3xl text-chalk-ink md:text-4xl">
+                  Start Collaborating Today
+                </h2>
+                <p className="mx-auto mt-3 max-w-xl text-base text-chalk-dust md:text-lg">
+                  Create an account or try as a guest. No credit card required.
+                </p>
+                <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('signup')}
+                    className={`btn-motion inline-flex h-11 items-center gap-2 rounded bg-paper px-7 font-semibold text-accent-700 hover:bg-note-azure ${FOCUS_ON_DARK}`}
+                  >
+                    <span>Create Free Account</span>
+                    <ArrowRight className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
-              <p className="text-sm leading-relaxed max-w-sm">
+            </WoodFrame>
+          </div>
+        </section>
+      </main>
+
+      {/* Footer on a dark wood shelf */}
+      <footer className="bg-wood-dark text-wood-cream">
+        <div className="mx-auto max-w-6xl px-4 py-12">
+          <div className="grid gap-8 md:grid-cols-4">
+            <div className="md:col-span-2">
+              <div className="mb-4 flex items-center gap-2">
+                <Layout className="h-7 w-7 text-note-amber" strokeWidth={1.5} aria-hidden="true" />
+                <span className="text-xl font-semibold text-chalk-ink">OpenCanvas</span>
+              </div>
+              <p className="max-w-sm text-sm leading-relaxed">
                 An educational collaborative whiteboard platform for academic institutions.
                 Create, Share, and Collaborate on digital boards.
               </p>
             </div>
 
-            {/* Links */}
-            <div>
-              <h4 className="text-white font-semibold mb-4">Platform</h4>
+            <nav aria-label="Platform">
+              <h3 className="mb-4 font-semibold text-chalk-ink">Platform</h3>
               <ul className="space-y-2 text-sm">
                 <li>
-                  <button onClick={() => onNavigate('login')} className="hover:text-white transition">
+                  <button type="button" onClick={() => onNavigate('login')} className={`hover:text-white ${FOCUS_ON_DARK}`}>
                     Sign In
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => onNavigate('about')} className="hover:text-white transition">
+                  <button type="button" onClick={() => onNavigate('about')} className={`hover:text-white ${FOCUS_ON_DARK}`}>
                     About
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => onNavigate('login')} className="hover:text-white transition">
+                  <button type="button" onClick={() => onNavigate('login')} className={`hover:text-white ${FOCUS_ON_DARK}`}>
                     Guest Access
                   </button>
                 </li>
               </ul>
-            </div>
+            </nav>
 
-            {/* Portals */}
-            <div>
-              <h4 className="text-white font-semibold mb-4">Portals</h4>
+            <nav aria-label="Portals">
+              <h3 className="mb-4 font-semibold text-chalk-ink">Portals</h3>
               <ul className="space-y-2 text-sm">
                 <li>
-                  <button onClick={() => onNavigate('login')} className="hover:text-white transition">
+                  <button type="button" onClick={() => onNavigate('login')} className={`hover:text-white ${FOCUS_ON_DARK}`}>
                     Student Portal
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => onNavigate('lecturer-login')} className="hover:text-white transition">
+                  <button type="button" onClick={() => onNavigate('lecturer-login')} className={`hover:text-white ${FOCUS_ON_DARK}`}>
                     Lecturer Portal
                   </button>
                 </li>
                 <li>
-                  <button onClick={() => onNavigate('admin-login')} className="hover:text-white transition">
+                  <button type="button" onClick={() => onNavigate('admin-login')} className={`hover:text-white ${FOCUS_ON_DARK}`}>
                     Admin Portal
                   </button>
                 </li>
               </ul>
-            </div>
+            </nav>
           </div>
 
-          <div className="border-t border-gray-800 mt-10 pt-6 text-center text-sm">
+          <div className="mt-10 border-t border-wood pt-6 text-center text-sm">
             &copy; {new Date().getFullYear()} OpenCanvas. All rights reserved.
           </div>
         </div>
       </footer>
-    </div>
+    </ClassroomShell>
   );
 }
 

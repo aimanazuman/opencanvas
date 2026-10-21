@@ -1,8 +1,103 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Lock, Palette, Globe, Download, Trash2, X, Eye, EyeOff, Check, AlertTriangle } from 'lucide-react';
+import { Bell, Lock, Palette, Globe, Download, Trash2, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import Navigation from '../components/Navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../services/api';
+import {
+  ClassroomShell, ChalkboardHeader, ClassroomAlert, ClassroomButton, ClassroomDialog, ClassroomField, PaperPanel,
+} from '../components/classroom';
+import cx from '../components/classroom/cx';
+
+/** One settings section: a white panel with a heading. */
+function Section({ id, icon: Icon, title, titleClassName = 'text-ink', children }) {
+  return (
+    <PaperPanel as="section" tone="white" padded={false} aria-labelledby={id} className="p-4 md:p-6">
+      <h2 id={id} className={cx('mb-3 flex items-center gap-2 text-lg font-semibold', titleClassName)}>
+        <Icon className="h-4 w-4 flex-none" strokeWidth={1.5} aria-hidden="true" />
+        <span>{title}</span>
+      </h2>
+      {children}
+    </PaperPanel>
+  );
+}
+
+/**
+ * Switch row. The whole row is the label, so the name is the text and the hit area is at least 44 px.
+ * The track is a sibling of the checkbox so the peer selectors can style it.
+ */
+function ToggleRow({ id, title, description, checked, onChange }) {
+  return (
+    <label className="flex min-h-[44px] cursor-pointer items-center justify-between gap-4 border-t border-line py-3">
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-ink">{title}</span>
+        <span className="block text-xs text-ink-2">{description}</span>
+      </span>
+      <span className="relative flex h-11 w-11 flex-none items-center justify-center md:h-8">
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          onChange={onChange}
+          className="peer sr-only"
+        />
+        <span
+          aria-hidden="true"
+          className={cx(
+            'relative h-6 w-11 rounded-full border border-line-strong bg-surface-hover transition-colors duration-150 ease-ui',
+            'after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-line-strong after:bg-surface after:transition-transform after:duration-150 after:content-[""]',
+            'peer-checked:border-accent peer-checked:bg-accent peer-checked:after:translate-x-5 peer-checked:after:border-accent',
+            'peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2',
+            'motion-reduce:transition-none motion-reduce:after:transition-none'
+          )}
+        />
+      </span>
+    </label>
+  );
+}
+
+/** Password input with a show and hide control inside the field. */
+function PasswordField({ id, label, value, onChange, visible, onToggle, hint, autoComplete }) {
+  return (
+    <ClassroomField
+      id={id}
+      label={label}
+      type={visible ? 'text' : 'password'}
+      value={value}
+      onChange={onChange}
+      autoComplete={autoComplete}
+      hint={hint}
+      controlClassName="pr-12"
+      endAdornment={(
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          aria-controls={id}
+          className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center rounded text-ink-2 hover:text-ink"
+        >
+          {visible ? <EyeOff className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" /> : <Eye className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />}
+        </button>
+      )}
+    />
+  );
+}
+
+/** Modal panel on the shared ClassroomDialog: white, focus moves in, Tab stays inside, Escape closes, focus returns. */
+function Dialog({ titleId, title, titleClassName = 'text-ink', onClose, children, footer }) {
+  return (
+    <ClassroomDialog
+      titleId={titleId}
+      title={title}
+      titleClassName={titleClassName}
+      onClose={onClose}
+      closeLabel="Close"
+      size="md"
+      footer={footer}
+    >
+      {children}
+    </ClassroomDialog>
+  );
+}
 
 const SettingsPage = ({ onNavigate }) => {
   const { user, logout } = useAuth();
@@ -26,7 +121,6 @@ const SettingsPage = ({ onNavigate }) => {
     confirm: false
   });
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState('');
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
@@ -74,7 +168,6 @@ const SettingsPage = ({ onNavigate }) => {
       setShowPasswordModal(false);
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setSaveSuccess(true);
-      setSaveError('');
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       const errorData = err.response?.data;
@@ -117,334 +210,198 @@ const SettingsPage = ({ onNavigate }) => {
     }
   };
 
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false);
+    setDeleteConfirmText('');
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <ClassroomShell>
       <Navigation onNavigate={onNavigate} />
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-          {saveSuccess && (
-            <div className="flex items-center space-x-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg">
-              <Check className="w-5 h-5" />
-              <span>Settings saved successfully!</span>
-            </div>
-          )}
-        </div>
+      <main aria-labelledby="settings-title" className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+        <ChalkboardHeader size="compact" titleId="settings-title" title="Settings" />
 
-        <div className="space-y-6">
-          {/* Notifications */}
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <Bell className="w-6 h-6 text-blue-600" />
-              <h2 className="text-xl font-bold text-gray-900">Notifications</h2>
-            </div>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-gray-900">Email Notifications</p>
-                  <p className="text-sm text-gray-600">Receive updates via email</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.emailNotifications}
-                    onChange={(e) => setSettings({...settings, emailNotifications: e.target.checked})}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-gray-900">Push Notifications</p>
-                  <p className="text-sm text-gray-600">Receive browser notifications</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.pushNotifications}
-                    onChange={(e) => setSettings({...settings, pushNotifications: e.target.checked})}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-            </div>
-          </div>
+        {saveSuccess && <ClassroomAlert tone="success">Settings saved successfully!</ClassroomAlert>}
 
-          {/* Appearance */}
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <Palette className="w-6 h-6 text-purple-600" />
-              <h2 className="text-xl font-bold text-gray-900">Appearance</h2>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Theme</label>
-              <select
-                value={settings.theme}
-                onChange={(e) => setSettings({...settings, theme: e.target.value})}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-                <option value="auto">Auto</option>
-              </select>
-            </div>
-          </div>
+        <Section id="settings-notifications" icon={Bell} title="Notifications">
+          <ToggleRow
+            id="settings-email-notifications"
+            title="Email Notifications"
+            description="Receive updates via email"
+            checked={settings.emailNotifications}
+            onChange={(e) => setSettings({...settings, emailNotifications: e.target.checked})}
+          />
+          <ToggleRow
+            id="settings-push-notifications"
+            title="Push Notifications"
+            description="Receive browser notifications"
+            checked={settings.pushNotifications}
+            onChange={(e) => setSettings({...settings, pushNotifications: e.target.checked})}
+          />
+        </Section>
 
-          {/* Privacy & Security */}
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <Lock className="w-6 h-6 text-red-600" />
-              <h2 className="text-xl font-bold text-gray-900">Privacy & Security</h2>
-            </div>
-            <div className="space-y-3">
-              <button
-                onClick={() => setShowPasswordModal(true)}
-                className="w-full px-4 py-3 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition font-medium text-left"
-              >
-                Change Password
-              </button>
-              <button
-                onClick={() => setShowExportModal(true)}
-                className="w-full px-4 py-3 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition font-medium text-left flex items-center space-x-2"
-              >
-                <Download className="w-4 h-4" />
-                <span>Export My Data</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Language */}
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <Globe className="w-6 h-6 text-green-600" />
-              <h2 className="text-xl font-bold text-gray-900">Language</h2>
-            </div>
-            <select
-              value={settings.language}
-              onChange={(e) => setSettings({...settings, language: e.target.value})}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-            >
-              <option value="en">English</option>
-              <option value="ms">Bahasa Melayu</option>
-            </select>
-          </div>
-
-          {/* Danger Zone */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-2 border-red-200">
-            <div className="flex items-center space-x-3 mb-4">
-              <AlertTriangle className="w-6 h-6 text-red-600" />
-              <h2 className="text-xl font-bold text-red-600">Danger Zone</h2>
-            </div>
-            <p className="text-gray-600 mb-4">
-              Once you delete your account, there is no going back. Please be certain.
-            </p>
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium flex items-center space-x-2"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Delete Account</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-8 flex justify-end">
-          <button
-            onClick={handleSaveSettings}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition"
+        <Section id="settings-appearance" icon={Palette} title="Appearance">
+          <ClassroomField
+            id="settings-theme"
+            as="select"
+            label="Theme"
+            value={settings.theme}
+            onChange={(e) => setSettings({...settings, theme: e.target.value})}
           >
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="auto">Auto</option>
+          </ClassroomField>
+        </Section>
+
+        <Section id="settings-privacy" icon={Lock} title="Privacy & Security">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ClassroomButton variant="secondary" icon={Lock} className="w-full" onClick={() => setShowPasswordModal(true)}>
+              Change Password
+            </ClassroomButton>
+            <ClassroomButton variant="secondary" icon={Download} className="w-full" onClick={() => setShowExportModal(true)}>
+              Export My Data
+            </ClassroomButton>
+          </div>
+        </Section>
+
+        <Section id="settings-language" icon={Globe} title="Language">
+          <ClassroomField
+            id="settings-language-select"
+            as="select"
+            label="Language"
+            value={settings.language}
+            onChange={(e) => setSettings({...settings, language: e.target.value})}
+          >
+            <option value="en">English</option>
+            <option value="ms">Bahasa Melayu</option>
+          </ClassroomField>
+        </Section>
+
+        <Section id="settings-danger" icon={AlertTriangle} title="Danger Zone" titleClassName="text-danger">
+          <p className="mb-4 text-sm text-ink-2">
+            Once you delete your account, there is no going back. Please be certain.
+          </p>
+          <ClassroomButton variant="danger" icon={Trash2} onClick={() => setShowDeleteModal(true)}>
+            Delete Account
+          </ClassroomButton>
+        </Section>
+
+        <div className="flex justify-end">
+          <ClassroomButton variant="primary" onClick={handleSaveSettings}>
             Save All Changes
-          </button>
+          </ClassroomButton>
         </div>
-      </div>
+      </main>
 
       {/* Password Change Modal */}
       {showPasswordModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">Change Password</h3>
-              <button
-                onClick={() => setShowPasswordModal(false)}
-                className="p-1 hover:bg-gray-100 rounded"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
-                <div className="relative">
-                  <input
-                    type={showPasswords.current ? 'text' : 'password'}
-                    value={passwordData.currentPassword}
-                    onChange={(e) => setPasswordData({...passwordData, currentPassword: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswords({...showPasswords, current: !showPasswords.current})}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  >
-                    {showPasswords.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                <div className="relative">
-                  <input
-                    type={showPasswords.new ? 'text' : 'password'}
-                    value={passwordData.newPassword}
-                    onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswords({...showPasswords, new: !showPasswords.new})}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  >
-                    {showPasswords.new ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Must be at least 8 characters</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-                <div className="relative">
-                  <input
-                    type={showPasswords.confirm ? 'text' : 'password'}
-                    value={passwordData.confirmPassword}
-                    onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswords({...showPasswords, confirm: !showPasswords.confirm})}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  >
-                    {showPasswords.confirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-            {passwordError && (
-              <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-                {passwordError}
-              </div>
-            )}
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => { setShowPasswordModal(false); setPasswordError(''); }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
-              >
+        <Dialog
+          titleId="settings-password-title"
+          title="Change Password"
+          onClose={() => setShowPasswordModal(false)}
+          footer={(
+            <>
+              <ClassroomButton variant="secondary" onClick={() => { setShowPasswordModal(false); setPasswordError(''); }}>
                 Cancel
-              </button>
-              <button
-                onClick={handlePasswordChange}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
-              >
+              </ClassroomButton>
+              <ClassroomButton variant="primary" onClick={handlePasswordChange}>
                 Update Password
-              </button>
-            </div>
-          </div>
-        </div>
+              </ClassroomButton>
+            </>
+          )}
+        >
+          <PasswordField
+            id="settings-current-password"
+            label="Current Password"
+            autoComplete="current-password"
+            value={passwordData.currentPassword}
+            onChange={(e) => setPasswordData({...passwordData, currentPassword: e.target.value})}
+            visible={showPasswords.current}
+            onToggle={() => setShowPasswords({...showPasswords, current: !showPasswords.current})}
+          />
+          <PasswordField
+            id="settings-new-password"
+            label="New Password"
+            autoComplete="new-password"
+            hint="Must be at least 8 characters"
+            value={passwordData.newPassword}
+            onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
+            visible={showPasswords.new}
+            onToggle={() => setShowPasswords({...showPasswords, new: !showPasswords.new})}
+          />
+          <PasswordField
+            id="settings-confirm-password"
+            label="Confirm New Password"
+            autoComplete="new-password"
+            value={passwordData.confirmPassword}
+            onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
+            visible={showPasswords.confirm}
+            onToggle={() => setShowPasswords({...showPasswords, confirm: !showPasswords.confirm})}
+          />
+          {passwordError && <ClassroomAlert>{passwordError}</ClassroomAlert>}
+        </Dialog>
       )}
 
       {/* Export Data Modal */}
       {showExportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">Export My Data</h3>
-              <button
-                onClick={() => setShowExportModal(false)}
-                className="p-1 hover:bg-gray-100 rounded"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <p className="text-gray-600 mb-6">
-              Export all your data including boards, settings, and enrollments as a JSON file.
-            </p>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setShowExportModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
-              >
+        <Dialog
+          titleId="settings-export-title"
+          title="Export My Data"
+          onClose={() => setShowExportModal(false)}
+          footer={(
+            <>
+              <ClassroomButton variant="secondary" onClick={() => setShowExportModal(false)}>
                 Cancel
-              </button>
-              <button
-                onClick={handleExportData}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center space-x-2"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download JSON</span>
-              </button>
-            </div>
-          </div>
-        </div>
+              </ClassroomButton>
+              <ClassroomButton variant="primary" icon={Download} onClick={handleExportData}>
+                Download JSON
+              </ClassroomButton>
+            </>
+          )}
+        >
+          <p className="text-sm text-ink-2">
+            Export all your data including boards, settings, and enrollments as a JSON file.
+          </p>
+        </Dialog>
       )}
 
       {/* Delete Account Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-red-600">Delete Account</h3>
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setDeleteConfirmText('');
-                }}
-                className="p-1 hover:bg-gray-100 rounded"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-              <p className="text-red-700 text-sm">
-                <strong>Warning:</strong> This action cannot be undone. All your boards, files, and data will be permanently deleted.
-              </p>
-            </div>
-            <p className="text-gray-600 mb-4">
-              Type <strong>DELETE</strong> to confirm:
-            </p>
-            <input
-              type="text"
-              value={deleteConfirmText}
-              onChange={(e) => setDeleteConfirmText(e.target.value)}
-              placeholder="Type DELETE to confirm"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 mb-6"
-            />
-            <div className="flex space-x-3">
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setDeleteConfirmText('');
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
-              >
+        <Dialog
+          titleId="settings-delete-title"
+          title="Delete Account"
+          titleClassName="text-danger"
+          onClose={closeDeleteModal}
+          footer={(
+            <>
+              <ClassroomButton variant="secondary" onClick={closeDeleteModal}>
                 Cancel
-              </button>
-              <button
-                onClick={handleDeleteAccount}
+              </ClassroomButton>
+              <ClassroomButton
+                variant="danger"
+                icon={Trash2}
                 disabled={deleteConfirmText !== 'DELETE'}
-                className={`flex-1 px-4 py-2 rounded-lg transition font-medium ${
-                  deleteConfirmText === 'DELETE'
-                    ? 'bg-red-600 text-white hover:bg-red-700'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
+                onClick={handleDeleteAccount}
               >
                 Delete Account
-              </button>
-            </div>
-          </div>
-        </div>
+              </ClassroomButton>
+            </>
+          )}
+        >
+          <ClassroomAlert>
+            <strong className="font-semibold">Warning:</strong> This action cannot be undone. All your boards, files, and data will be permanently deleted.
+          </ClassroomAlert>
+          <ClassroomField
+            id="settings-delete-confirm"
+            label="Type DELETE to confirm"
+            autoComplete="off"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+          />
+        </Dialog>
       )}
-    </div>
+    </ClassroomShell>
   );
 };
 

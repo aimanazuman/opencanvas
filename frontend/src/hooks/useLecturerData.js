@@ -1,17 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
-import { coursesApi, enrollmentsApi, boardsApi } from '../services/api';
+import { coursesApi, enrollmentsApi } from '../services/api';
 
 export function useLecturerData() {
   const [courses, setCourses] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
   const [loading, setLoading] = useState(true);
+  // True when the last courses or enrollments request failed. Lets pages show an error, not an empty state.
+  // Tracked per list so a later successful load of a list clears its own failure.
+  const [coursesFailed, setCoursesFailed] = useState(false);
+  const [enrollmentsFailed, setEnrollmentsFailed] = useState(false);
+  const loadFailed = coursesFailed || enrollmentsFailed;
 
   const loadCourses = useCallback(async () => {
     try {
       const res = await coursesApi.getAll();
       setCourses(res.data.results || res.data);
+      setCoursesFailed(false);
+      return true;
     } catch (err) {
       console.error('Failed to load courses:', err);
+      setCoursesFailed(true);
+      return false;
     }
   }, []);
 
@@ -19,19 +28,25 @@ export function useLecturerData() {
     try {
       const res = await enrollmentsApi.getAll();
       setEnrollments(res.data.results || res.data);
+      setEnrollmentsFailed(false);
+      return true;
     } catch (err) {
       console.error('Failed to load enrollments:', err);
+      setEnrollmentsFailed(true);
+      return false;
     }
   }, []);
 
-  useEffect(() => {
-    const loadAll = async () => {
-      setLoading(true);
-      await Promise.all([loadCourses(), loadEnrollments()]);
-      setLoading(false);
-    };
-    loadAll();
+  // Loads both lists. Used on mount and by the page's retry control.
+  const reload = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([loadCourses(), loadEnrollments()]);
+    setLoading(false);
   }, [loadCourses, loadEnrollments]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   const totalStudents = courses.reduce((acc, c) => acc + (c.student_count || 0), 0);
   const totalBoards = courses.reduce((acc, c) => acc + (c.board_count || 0), 0);
@@ -68,6 +83,8 @@ export function useLecturerData() {
     courses,
     enrollments,
     loading,
+    loadFailed,
+    reload,
     totalStudents,
     totalBoards,
     loadCourses,

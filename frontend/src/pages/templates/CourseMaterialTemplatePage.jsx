@@ -9,7 +9,7 @@ export default function CourseMaterialTemplatePage({ onNavigate }) {
       templateId="course-material"
       templateName="Course Material"
       templateDescription="Structured course content with topics, announcements, and resources"
-      templateColor="indigo"
+      templateColor="azure"
       TemplateIcon={BookOpen}
     />
   );

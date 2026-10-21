@@ -21,7 +21,7 @@ const ProtectedRoute = ({ children, requireRole }) => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div role="status" aria-label="Loading" className="animate-spin rounded-full h-4 w-4 border-2 border-line border-t-accent"></div>
       </div>
     );
   }

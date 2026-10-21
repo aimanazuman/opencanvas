@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Palette, Mail, Lock, Eye, EyeOff, User, ArrowRight } from 'lucide-react';
+import { Mail, User, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import AuthFrame from '../components/auth/AuthFrame';
+import { IconField, PasswordField, Notice } from '../components/auth/AuthFields';
+import { ClassroomButton, ClassroomField } from '../components/classroom';
 
 function SignUpPage({ onNavigate }) {
   const { register, loginAsGuest } = useAuth();
@@ -74,31 +77,26 @@ function SignUpPage({ onNavigate }) {
   // Verification sent screen
   if (verificationSent) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Mail className="w-8 h-8 text-green-600" />
+      <AuthFrame titleId="signup-sent-title" title="Check your email" onHome={() => onNavigate('home')}>
+        <div className="text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success-tint">
+            <Mail className="h-8 w-8 text-success" strokeWidth={1.5} aria-hidden="true" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Check your email</h2>
-          <p className="text-gray-600 mb-2">
-            We've sent a verification link to:
-          </p>
-          <p className="font-semibold text-gray-900 mb-6">{email}</p>
-          <p className="text-sm text-gray-500 mb-6">
+          <p className="mb-2 text-ink-2">We've sent a verification link to:</p>
+          <p className="mb-6 break-all font-semibold text-ink">{email}</p>
+          <p className="mb-6 text-sm text-ink-2">
             Click the link in the email to verify your account. If you don't see it, check your spam folder.
           </p>
-          <button
-            onClick={() => onNavigate('login')}
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition shadow-md"
-          >
+          <ClassroomButton variant="primary" onClick={() => onNavigate('login')} className="w-full">
             Go to Sign In
-          </button>
-          <p className="text-xs text-gray-400 mt-4">
+          </ClassroomButton>
+          <p className="mt-4 text-xs text-ink-2">
             Didn't receive the email?{' '}
             {resendStatus === 'sent' ? (
-              <span className="text-green-600 font-medium">Verification email sent!</span>
+              <span className="font-medium text-success">Verification email sent!</span>
             ) : (
               <button
+                type="button"
                 onClick={async () => {
                   if (resendStatus === 'sending') return;
                   setResendStatus('sending');
@@ -113,178 +111,131 @@ function SignUpPage({ onNavigate }) {
                   }
                 }}
                 disabled={resendStatus === 'sending'}
-                className="text-indigo-600 hover:underline font-medium disabled:opacity-50"
+                className="inline-flex min-h-[44px] items-center px-1 font-medium text-accent-700 underline underline-offset-2 hover:text-accent-800 disabled:opacity-50"
               >
                 {resendStatus === 'sending' ? 'Sending...' : 'Resend'}
               </button>
             )}
           </p>
         </div>
-      </div>
+      </AuthFrame>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center space-x-2 cursor-pointer" onClick={() => onNavigate('home')}>
-            <Palette className="h-10 w-10 text-indigo-600" />
-            <span className="text-3xl font-bold text-gray-900">OpenCanvas</span>
-          </div>
-          <p className="text-gray-600 mt-2">Create your account</p>
+    <AuthFrame
+      titleId="signup-title"
+      title="Join the class"
+      subtitle="Create your account to start a board."
+      onHome={() => onNavigate('home')}
+    >
+      {/* Error message */}
+      {error && <Notice tone="error" icon={AlertCircle}>{error}</Notice>}
+
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <IconField
+          id="signup-username"
+          label="Username"
+          icon={User}
+          type="text"
+          autoComplete="username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="johndoe"
+          required
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <ClassroomField
+            id="signup-first-name"
+            label="First Name"
+            type="text"
+            autoComplete="given-name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            placeholder="John"
+            required
+          />
+          <ClassroomField
+            id="signup-last-name"
+            label="Last Name"
+            type="text"
+            autoComplete="family-name"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            placeholder="Doe"
+            required
+          />
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
+        <IconField
+          id="signup-email"
+          label="Email"
+          icon={Mail}
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="john@example.com"
+          required
+        />
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="johndoe"
-                required
-              />
-            </div>
-          </div>
+        <PasswordField
+          id="signup-password"
+          label="Password"
+          autoComplete="new-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Create a password"
+          required
+          visible={showPassword}
+          onToggle={() => setShowPassword(!showPassword)}
+        />
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-              <input
-                type="text"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="John"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-              <input
-                type="text"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="Doe"
-                required
-              />
-            </div>
-          </div>
+        <PasswordField
+          id="signup-confirm-password"
+          label="Confirm Password"
+          autoComplete="new-password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Confirm your password"
+          required
+          visible={showConfirmPassword}
+          onToggle={() => setShowConfirmPassword(!showConfirmPassword)}
+        />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="john@example.com"
-                required
-              />
-            </div>
-          </div>
+        <ClassroomButton type="submit" variant="primary" disabled={loading} className="w-full">
+          {loading ? 'Creating account...' : 'Create Account'}
+        </ClassroomButton>
+      </form>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="Create a password"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type={showConfirmPassword ? 'text' : 'password'}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="Confirm your password"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Creating account...' : 'Create Account'}
-          </button>
-        </form>
-
-        {/* Divider */}
-        <div className="my-6 flex items-center">
-          <div className="flex-1 border-t border-gray-300"></div>
-          <span className="px-4 text-sm text-gray-500">or</span>
-          <div className="flex-1 border-t border-gray-300"></div>
-        </div>
-
-        {/* Continue as Guest */}
-        <button
-          onClick={handleGuestAccess}
-          disabled={loading}
-          className="w-full border-2 border-gray-300 text-gray-700 py-2.5 rounded-lg font-semibold hover:bg-gray-50 hover:border-gray-400 transition flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <span>Continue as Guest</span>
-          <ArrowRight className="h-4 w-4" />
-        </button>
-        <p className="text-xs text-gray-500 text-center mt-2">
-          Limited features available in guest mode
-        </p>
-
-        {/* Link to Sign In */}
-        <div className="mt-6 text-center text-sm text-gray-600">
-          Already have an account?{' '}
-          <button
-            onClick={() => onNavigate('login')}
-            className="text-indigo-600 font-semibold hover:underline"
-          >
-            Sign in
-          </button>
-        </div>
+      {/* Divider */}
+      <div className="my-5 flex items-center gap-3">
+        <div className="h-px flex-1 bg-line" aria-hidden="true" />
+        <span className="text-sm text-ink-2">or</span>
+        <div className="h-px flex-1 bg-line" aria-hidden="true" />
       </div>
-    </div>
+
+      {/* Continue as Guest */}
+      <ClassroomButton variant="secondary" onClick={handleGuestAccess} disabled={loading} className="w-full">
+        <span>Continue as Guest</span>
+        <ArrowRight className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+      </ClassroomButton>
+      <p className="mt-2 text-center text-xs text-ink-2">Limited features available in guest mode</p>
+
+      {/* Link to Sign In */}
+      <div className="mt-5 text-center text-sm text-ink-2">
+        Already have an account?{' '}
+        <button
+          type="button"
+          onClick={() => onNavigate('login')}
+          className="inline-flex min-h-[44px] items-center px-1 font-semibold text-accent-700 hover:underline"
+        >
+          Sign in
+        </button>
+      </div>
+    </AuthFrame>
   );
 }
 

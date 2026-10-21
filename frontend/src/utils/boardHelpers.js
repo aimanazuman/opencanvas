@@ -67,7 +67,7 @@ export function createComment(text, user) {
   };
 }
 
-export function createKanbanColumn(title, color = '#6366f1') {
+export function createKanbanColumn(title, color = '#0A66C2') {
   return {
     id: generateId(),
     title,
@@ -120,7 +120,7 @@ export function getVideoThumbnail(url) {
   return null;
 }
 
-export function createStudyPlannerEntry(subject = '', color = '#6366f1') {
+export function createStudyPlannerEntry(subject = '', color = '#0A66C2') {
   return {
     id: generateId(),
     subject,

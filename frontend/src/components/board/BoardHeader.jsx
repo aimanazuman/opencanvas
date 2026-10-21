@@ -1,16 +1,48 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Save, Undo, Redo, UserPlus, Eye, BookOpen, User as UserIcon, Check, Loader2, Clock } from 'lucide-react';
+import {
+  ArrowLeft, Save, Undo, Redo, UserPlus, Eye, BookOpen, User as UserIcon, Check, Loader2, Clock, AlertCircle, Circle,
+  FileText, StickyNote, CalendarDays, Kanban, ListChecks,
+} from 'lucide-react';
 import { BOARD_TYPES } from '../../utils/boardHelpers';
 import ShareModal from './ShareModal';
+import Button from '../ui/Button';
+import ChalkBadge from '../classroom/ChalkBadge';
 
+// Static lookup maps: Tailwind only sees literal class names. Type and status are always label plus icon.
 const TYPE_BADGES = {
-  [BOARD_TYPES.COURSE_MATERIAL]: { label: 'Course Material', color: 'bg-indigo-100 text-indigo-700' },
-  [BOARD_TYPES.LECTURE_NOTES]: { label: 'Course Material', color: 'bg-indigo-100 text-indigo-700' }, // legacy
-  [BOARD_TYPES.STUDENT_NOTES]: { label: 'Student Notes', color: 'bg-emerald-100 text-emerald-700' },
-  [BOARD_TYPES.STUDY_PLANNER]: { label: 'Study Planner', color: 'bg-teal-100 text-teal-700' },
-  [BOARD_TYPES.KANBAN]: { label: 'Kanban', color: 'bg-cyan-100 text-cyan-700' },
-  [BOARD_TYPES.QUIZ]: { label: 'Quiz', color: 'bg-rose-100 text-rose-700' },
+  [BOARD_TYPES.COURSE_MATERIAL]: { label: 'Course Material', icon: FileText },
+  [BOARD_TYPES.LECTURE_NOTES]: { label: 'Course Material', icon: FileText }, // legacy
+  [BOARD_TYPES.STUDENT_NOTES]: { label: 'Student Notes', icon: StickyNote },
+  [BOARD_TYPES.STUDY_PLANNER]: { label: 'Study Planner', icon: CalendarDays },
+  [BOARD_TYPES.KANBAN]: { label: 'Kanban', icon: Kanban },
+  [BOARD_TYPES.QUIZ]: { label: 'Quiz', icon: ListChecks },
 };
+
+const SAVE_STATE = {
+  saving: { label: 'Saving...', icon: Loader2, tone: 'neutral', iconClassName: 'motion-safe:animate-spin' },
+  saved: { label: 'Saved', icon: Check, tone: 'success' },
+  error: { label: 'Save failed', icon: AlertCircle, tone: 'danger' },
+  unsaved: { label: 'Unsaved changes', icon: Circle, tone: 'warning' },
+};
+
+// Title: the UI font in both states (read-only span and editable input), so the font does not change on edit.
+// Short names keep the larger size; names of 40 characters or more are smaller.
+const TITLE_FONT = { short: 'font-sans text-lg font-semibold', long: 'font-sans text-sm font-medium' };
+const TITLE_INPUT = 'h-11 md:h-8 w-48 max-w-full min-w-0 rounded border border-transparent bg-transparent px-2 text-ink hover:border-line focus:border-accent';
+
+// 44 px on phones, 32 px on desktop.
+const ICON_BTN = 'flex h-11 w-11 flex-none items-center justify-center rounded text-ink hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 md:h-8 md:w-8';
+
+// Same rules as before: nothing while read-only; "Unsaved changes" also shows next to a failed save.
+function saveBadges(canEdit, isDirty, saveStatus) {
+  if (!canEdit) return [];
+  const list = [];
+  if (saveStatus === 'saving') list.push(SAVE_STATE.saving);
+  if (saveStatus === 'saved') list.push(SAVE_STATE.saved);
+  if (saveStatus === 'error') list.push(SAVE_STATE.error);
+  if (isDirty && saveStatus !== 'saving' && saveStatus !== 'saved') list.push(SAVE_STATE.unsaved);
+  return list;
+}
 
 export default function BoardHeader({
   boardName,
@@ -33,123 +65,94 @@ export default function BoardHeader({
   const badge = TYPE_BADGES[boardType];
   const [showShareModal, setShowShareModal] = useState(false);
   const isPersonal = !courseName;
+  const titleFont = (boardName || '').length < 40 ? TITLE_FONT.short : TITLE_FONT.long;
 
   return (
     <>
-      <header className="bg-white border-b px-4 py-2 flex items-center justify-between flex-shrink-0 z-30">
-        <div className="flex items-center space-x-3">
-          <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-lg transition active:scale-95" title="Back" aria-label="Go back">
-            <ArrowLeft className="h-5 w-5" />
+      {/* Wood-toned bottom edge; the surface stays white and flat. */}
+      <header className="z-30 flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-b-4 border-wood bg-surface px-3 py-1 md:h-10 md:flex-nowrap md:py-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <button type="button" onClick={onBack} className={ICON_BTN} title="Back" aria-label="Go back">
+            <ArrowLeft className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
           </button>
           {/* Context badge: course or personal */}
           {isPersonal ? (
-            <span className="flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              <UserIcon className="h-3 w-3" />
-              <span>Personal Board</span>
-            </span>
+            <ChalkBadge icon={UserIcon} label="Personal Board" />
           ) : (
-            <span className="flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
-              <BookOpen className="h-3 w-3" />
-              <span>{courseName}{sectionName ? ` / ${sectionName}` : ''}</span>
-            </span>
+            <ChalkBadge icon={BookOpen} label={`${courseName}${sectionName ? ` / ${sectionName}` : ''}`} />
           )}
           {canEdit ? (
             <input
               type="text"
               value={boardName}
               onChange={(e) => onNameChange(e.target.value)}
-              className="font-semibold text-lg border-none focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded px-2 py-1"
+              aria-label="Board name"
+              className={`${TITLE_INPUT} ${titleFont}`}
             />
           ) : (
-            <span className="font-semibold text-lg px-2 py-1">{boardName}</span>
+            <span className={`flex h-11 items-center px-2 text-ink md:h-8 ${titleFont}`}>{boardName}</span>
           )}
-          {badge && (
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badge.color}`}>
-              {badge.label}
-            </span>
-          )}
-          {!canEdit && (
-            <span className="flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              <Eye className="h-3 w-3" />
-              <span>View Only</span>
-            </span>
-          )}
-          {/* Save status / unsaved indicator */}
-          {canEdit && saveStatus === 'saving' && (
-            <span className="flex items-center space-x-1.5 text-xs text-blue-600">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              <span>Saving...</span>
-            </span>
-          )}
-          {canEdit && saveStatus === 'saved' && (
-            <span className="flex items-center space-x-1.5 text-xs text-green-600">
-              <Check className="w-3 h-3" />
-              <span>Saved</span>
-            </span>
-          )}
-          {canEdit && saveStatus === 'error' && (
-            <span className="flex items-center space-x-1.5 text-xs text-red-600">
-              <span>Save failed</span>
-            </span>
-          )}
-          {canEdit && isDirty && saveStatus !== 'saving' && saveStatus !== 'saved' && (
-            <span className="flex items-center space-x-1.5 text-xs text-amber-600">
-              <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-              <span>Unsaved changes</span>
-            </span>
-          )}
+          {badge && <ChalkBadge icon={badge.icon} label={badge.label} />}
+          {!canEdit && <ChalkBadge icon={Eye} label="View Only" />}
+          {/* Save status: icon plus text */}
+          <span role="status" aria-live="polite" className="contents">
+            {saveBadges(canEdit, isDirty, saveStatus).map((state) => (
+              <ChalkBadge
+                key={state.label}
+                icon={state.icon}
+                label={state.label}
+                tone={state.tone}
+                iconClassName={state.iconClassName}
+              />
+            ))}
+          </span>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-1">
           {canEdit && (
             <>
               <button
+                type="button"
                 onClick={onUndo}
                 disabled={!canUndo}
-                className={`p-2 rounded-lg ${canUndo ? 'hover:bg-gray-100' : 'opacity-50'}`}
+                className={ICON_BTN}
                 title="Undo (Ctrl+Z)"
                 aria-label="Undo"
               >
-                <Undo className="h-5 w-5" />
+                <Undo className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
               </button>
               <button
+                type="button"
                 onClick={onRedo}
                 disabled={!canRedo}
-                className={`p-2 rounded-lg ${canRedo ? 'hover:bg-gray-100' : 'opacity-50'}`}
+                className={ICON_BTN}
                 title="Redo (Ctrl+Y)"
                 aria-label="Redo"
               >
-                <Redo className="h-5 w-5" />
+                <Redo className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
               </button>
-              <div className="w-px h-6 bg-gray-300 mx-2" />
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="p-2 hover:bg-gray-100 rounded-lg flex items-center space-x-1"
-                title="Invite Members"
-              >
-                <UserPlus className="h-5 w-5" />
-                <span className="text-sm hidden sm:inline">Invite</span>
-              </button>
+              <div className="mx-1 h-5 w-px bg-line" aria-hidden="true" />
+              <Button variant="ghost" icon={UserPlus} onClick={() => setShowShareModal(true)} title="Invite Members">
+                <span className="hidden sm:inline">Invite</span>
+                <span className="sr-only sm:hidden">Invite</span>
+              </Button>
               {onShowVersionHistory && (
                 <button
+                  type="button"
                   onClick={onShowVersionHistory}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
+                  className={ICON_BTN}
                   title="Version History"
                   aria-label="Version History"
                 >
-                  <Clock className="h-5 w-5" />
+                  <Clock className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
                 </button>
               )}
             </>
           )}
           {canEdit && (
-            <button
-              onClick={onSave}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition active:scale-95 flex items-center space-x-1"
-            >
-              <Save className="h-4 w-4" />
-              <span>Save</span>
-            </button>
+            <Button variant="primary" icon={Save} onClick={onSave}>
+              Save
+            </Button>
           )}
         </div>
       </header>

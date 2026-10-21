@@ -107,13 +107,13 @@ export default function BulkImportModal({ courses = [], onClose, onComplete, sho
   const summary = results?.summary;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-backdropFade">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden animate-scaleIn">
+    <div className="fixed inset-0 bg-[var(--scrim)] flex items-center justify-center z-50 p-4 animate-backdropFade">
+      <div className="bg-white rounded-xl shadow-modal w-full max-w-2xl max-h-[90vh] overflow-hidden animate-scaleIn">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-indigo-600 to-purple-600">
+        <div className="flex items-center justify-between px-6 py-4 border-b bg-accent-600">
           <div className="flex items-center space-x-3">
             <Users className="w-6 h-6 text-white" />
-            <h2 className="text-xl font-bold text-white">Bulk Import Students</h2>
+            <h2 className="text-xl font-semibold text-white">Bulk Import Students</h2>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-lg transition">
             <X className="w-5 h-5 text-white" />
@@ -135,7 +135,7 @@ export default function BulkImportModal({ courses = [], onClose, onComplete, sho
                 <select
                   value={courseId}
                   onChange={(e) => setCourseId(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                 >
                   <option value="">No course enrollment</option>
                   {courses.map(c => (
@@ -151,7 +151,7 @@ export default function BulkImportModal({ courses = [], onClose, onComplete, sho
                   type="checkbox"
                   checked={sendEmails}
                   onChange={(e) => setSendEmails(e.target.checked)}
-                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                  className="w-4 h-4 text-accent-600 rounded focus-visible:ring-accent"
                 />
                 <div>
                   <span className="text-sm font-medium text-gray-700">Send welcome emails</span>
@@ -162,7 +162,7 @@ export default function BulkImportModal({ courses = [], onClose, onComplete, sho
               {/* File upload area */}
               <div
                 onClick={() => fileRef.current?.click()}
-                className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition"
+                className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer hover:border-accent-400 hover:bg-accent-50 transition"
               >
                 <Upload className="w-12 h-12 mx-auto text-gray-400 mb-3" />
                 <p className="text-lg font-medium text-gray-700">
@@ -181,7 +181,7 @@ export default function BulkImportModal({ courses = [], onClose, onComplete, sho
               {/* Template download */}
               <button
                 onClick={handleDownloadTemplate}
-                className="flex items-center space-x-2 text-sm text-indigo-600 hover:text-indigo-700"
+                className="flex items-center space-x-2 text-sm text-accent-600 hover:text-accent-700"
               >
                 <Download className="w-4 h-4" />
                 <span>Download CSV template</span>
@@ -221,20 +221,20 @@ export default function BulkImportModal({ courses = [], onClose, onComplete, sho
                 </div>
                 <button
                   onClick={() => { setStep('upload'); setFile(null); setPreviewRows([]); setError(''); }}
-                  className="text-sm text-indigo-600 hover:underline"
+                  className="text-sm text-accent-600 hover:underline"
                 >
                   Change file
                 </button>
               </div>
 
               {courseId && (
-                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-sm text-indigo-700">
+                <div className="bg-accent-50 border border-accent-200 rounded-lg p-3 text-sm text-accent-700">
                   Enrolling in: {courses.find(c => String(c.id) === String(courseId))?.code || 'Selected course'}
                 </div>
               )}
 
               {sendEmails && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700 flex items-center space-x-2">
+                <div className="bg-accent-50 border border-accent-200 rounded-lg p-3 text-sm text-accent-700 flex items-center space-x-2">
                   <Mail className="w-4 h-4" />
                   <span>Welcome emails will be sent to new students</span>
                 </div>
@@ -282,7 +282,7 @@ export default function BulkImportModal({ courses = [], onClose, onComplete, sho
           {/* Step: Importing */}
           {step === 'importing' && (
             <div className="text-center py-12">
-              <Loader2 className="w-16 h-16 mx-auto text-indigo-600 animate-spin mb-4" />
+              <Loader2 className="w-16 h-16 mx-auto text-accent-600 animate-spin mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-2">Importing Students...</h3>
               <p className="text-gray-500">Creating accounts, enrolling in courses, and sending emails.</p>
               <p className="text-sm text-gray-400 mt-2">This may take a moment for large files.</p>
@@ -300,25 +300,25 @@ export default function BulkImportModal({ courses = [], onClose, onComplete, sho
               {/* Summary cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-green-700">{summary.created}</p>
+                  <p className="text-2xl font-semibold text-green-700">{summary.created}</p>
                   <p className="text-xs text-green-600">Created</p>
                 </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-blue-700">{summary.existing}</p>
-                  <p className="text-xs text-blue-600">Existing</p>
+                <div className="bg-accent-50 border border-accent-200 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-semibold text-accent-700">{summary.existing}</p>
+                  <p className="text-xs text-accent-600">Existing</p>
                 </div>
-                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-indigo-700">{summary.enrolled}</p>
-                  <p className="text-xs text-indigo-600">Enrolled</p>
+                <div className="bg-accent-50 border border-accent-200 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-semibold text-accent-700">{summary.enrolled}</p>
+                  <p className="text-xs text-accent-600">Enrolled</p>
                 </div>
                 <div className={`${summary.errors > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'} border rounded-lg p-3 text-center`}>
-                  <p className={`text-2xl font-bold ${summary.errors > 0 ? 'text-red-700' : 'text-gray-400'}`}>{summary.errors}</p>
+                  <p className={`text-2xl font-semibold ${summary.errors > 0 ? 'text-red-700' : 'text-gray-400'}`}>{summary.errors}</p>
                   <p className={`text-xs ${summary.errors > 0 ? 'text-red-600' : 'text-gray-500'}`}>Errors</p>
                 </div>
               </div>
 
               {summary.emails_sent > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700 flex items-center space-x-2">
+                <div className="bg-accent-50 border border-accent-200 rounded-lg p-3 text-sm text-accent-700 flex items-center space-x-2">
                   <Mail className="w-4 h-4" />
                   <span>{summary.emails_sent} welcome email{summary.emails_sent !== 1 ? 's' : ''} sent (check MailHog at localhost:8025)</span>
                 </div>
@@ -369,7 +369,7 @@ export default function BulkImportModal({ courses = [], onClose, onComplete, sho
               <button
                 onClick={handleImport}
                 disabled={importing}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium disabled:opacity-50 flex items-center space-x-2"
+                className="px-6 py-2 bg-accent-600 text-white rounded-lg hover:bg-accent-700 transition font-medium disabled:opacity-50 flex items-center space-x-2"
               >
                 <Upload className="w-4 h-4" />
                 <span>Import Students</span>
@@ -379,7 +379,7 @@ export default function BulkImportModal({ courses = [], onClose, onComplete, sho
           {step === 'results' && (
             <button
               onClick={() => { onComplete?.(); onClose(); }}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium"
+              className="px-6 py-2 bg-accent-600 text-white rounded-lg hover:bg-accent-700 transition font-medium"
             >
               Done
             </button>

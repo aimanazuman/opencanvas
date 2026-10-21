@@ -1,14 +1,56 @@
 import React, { useState } from 'react';
 import { openMailto } from '../../utils/safeUrl';
 import {
-  UserPlus, Search, Filter, Eye, Mail, X, Users, Upload, Edit3, Check, ChevronDown, Calendar
+  UserPlus, Mail, Eye, Upload, Edit3, Check, X, Calendar, CheckCircle, XCircle, Archive, Users,
 } from 'lucide-react';
 import { enrollmentsApi, usersApi, coursesApi } from '../../services/api';
 import { useLecturerData, formatTimeAgo } from '../../hooks/useLecturerData';
 import BulkImportModal from '../../components/BulkImportModal';
+import {
+  ChalkboardHeader, ChalkBadge, ClassroomAlert, ClassroomButton, ClassroomDialog, ClassroomField, StickyNote,
+} from '../../components/classroom';
+import cx from '../../components/classroom/cx';
+
+// Static class lookups: Tailwind only sees literal class names. Selection is a tint plus a checkbox, never colour alone.
+const ICON_BUTTON = 'flex h-11 w-11 flex-none items-center justify-center rounded text-ink-2 hover:bg-surface-hover md:h-8 md:w-8';
+const ICON_BUTTON_DONE = 'flex h-11 w-11 flex-none items-center justify-center rounded bg-success-tint text-success hover:opacity-90 md:h-8 md:w-8';
+const TOGGLE_BASE = 'inline-flex h-11 items-center gap-2 rounded border px-3 text-sm font-medium md:h-8';
+const TOGGLE = {
+  on: 'border-accent bg-accent-tint text-accent-700',
+  off: 'border-line-strong bg-surface text-ink hover:bg-surface-hover',
+};
+const CELL_CHECK = 'flex h-11 w-11 items-center justify-center';
+const STAT_TILE = 'rounded-lg border border-line bg-surface p-4';
+const SELECT_INLINE = 'h-11 w-28 rounded border border-line-strong bg-surface px-2 text-sm text-ink md:h-8';
+
+// Enrolment status badges. Tone and icon carry the meaning, not colour alone.
+const STATUS = {
+  active: { label: 'Active', icon: CheckCircle, tone: 'success' },
+  dropped: { label: 'Dropped', icon: XCircle, tone: 'danger' },
+  completed: { label: 'Completed', icon: Archive, tone: 'neutral' },
+};
+
+function statusBadgeProps(status) {
+  if (STATUS[status]) return STATUS[status];
+  const label = status ? `${status.charAt(0).toUpperCase()}${status.slice(1)}` : 'Unknown';
+  return { label, icon: Archive, tone: 'neutral' };
+}
+
+// Loading placeholder: static rows, announced once through a status region.
+function StudentsSkeleton() {
+  return (
+    <div role="status" aria-busy="true" className="space-y-4">
+      <span className="sr-only">Loading students</span>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {[0, 1, 2].map((i) => <div key={i} aria-hidden="true" className="h-20 rounded-lg border border-line bg-line" />)}
+      </div>
+      <div aria-hidden="true" className="h-64 rounded-lg border border-line bg-line" />
+    </div>
+  );
+}
 
 export default function LecturerStudentsPage() {
-  const { courses, loading, loadEnrollments, loadCourses, getStudentsList, getSectionsForCourse } = useLecturerData();
+  const { courses, loading, loadFailed, reload, loadEnrollments, loadCourses, getStudentsList } = useLecturerData();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCourse, setFilterCourse] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -37,7 +79,6 @@ export default function LecturerStudentsPage() {
   // Bulk edit
   const [selectedStudents, setSelectedStudents] = useState(new Set());
   const [showBulkEdit, setShowBulkEdit] = useState(false);
-  const [bulkCourseId, setBulkCourseId] = useState('');
   const [bulkSection, setBulkSection] = useState('');
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
@@ -187,7 +228,6 @@ export default function LecturerStudentsPage() {
       await Promise.all(updates);
       setShowBulkEdit(false);
       setSelectedStudents(new Set());
-      setBulkCourseId('');
       setBulkSection('');
       setBulkStatus('');
       loadEnrollments();
@@ -204,347 +244,362 @@ export default function LecturerStudentsPage() {
     return course?.sections || [];
   };
 
+  const closeBulkEdit = () => setShowBulkEdit(false);
+  const closeViewing = () => setViewingStudent(null);
+  const viewingBadge = viewingStudent ? statusBadgeProps(viewingStudent.status) : null;
+
+  let body;
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600" />
-      </div>
+    body = <StudentsSkeleton />;
+  } else if (loadFailed) {
+    // A failed load must not look like zero students: the alert replaces the stats and the table.
+    body = (
+      <ClassroomAlert>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p>Could not load your students. Check your connection and try again.</p>
+          <ClassroomButton onClick={reload}>Try again</ClassroomButton>
+        </div>
+      </ClassroomAlert>
+    );
+  } else {
+    body = (
+      <>
+        {/* Stats */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className={STAT_TILE}>
+            <p className="text-sm text-ink-2">Total Enrolled</p>
+            <p className="text-2xl font-semibold text-ink">{allStudents.length}</p>
+          </div>
+          <div className={STAT_TILE}>
+            <p className="text-sm text-ink-2">Active</p>
+            <p className="text-2xl font-semibold text-success">{allStudents.filter(s => s.status === 'active').length}</p>
+          </div>
+          <div className={STAT_TILE}>
+            <p className="text-sm text-ink-2">Dropped</p>
+            <p className="text-2xl font-semibold text-danger">{allStudents.filter(s => s.status === 'dropped').length}</p>
+          </div>
+        </div>
+
+        {/* Search & Filter */}
+        <section aria-label="Search and filter students" className="space-y-3 rounded-lg border border-line bg-surface p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end">
+            <ClassroomField
+              type="search"
+              className="min-w-0 md:flex-1"
+              label="Search students"
+              placeholder="Name or email"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <ClassroomField
+              as="select"
+              className="md:w-48"
+              label="Course"
+              value={filterCourse}
+              onChange={(e) => setFilterCourse(e.target.value)}
+            >
+              <option value="all">All Courses</option>
+              {courses.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+            </ClassroomField>
+            <ClassroomField
+              as="select"
+              className="md:w-44"
+              label="Status"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="dropped">Dropped</option>
+              <option value="completed">Completed</option>
+            </ClassroomField>
+            <button
+              type="button"
+              aria-expanded={showFilters}
+              aria-controls="students-date-filters"
+              onClick={() => setShowFilters(!showFilters)}
+              className={cx(TOGGLE_BASE, showFilters ? TOGGLE.on : TOGGLE.off)}
+            >
+              <Calendar className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+              <span>Date</span>
+            </button>
+          </div>
+          {showFilters && (
+            <div id="students-date-filters" className="flex flex-wrap items-end gap-4 border-t border-line pt-3">
+              <ClassroomField
+                type="date"
+                className="w-full sm:w-44"
+                label="Enrolled From"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+              />
+              <ClassroomField
+                type="date"
+                className="w-full sm:w-44"
+                label="Enrolled To"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+              />
+              {(filterDateFrom || filterDateTo) && (
+                <ClassroomButton variant="ghost" onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); }}>
+                  Clear dates
+                </ClassroomButton>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* Table: white body with hairline rows. On phones it scrolls sideways inside its own region. */}
+        <section aria-label="Enrolled students" className="overflow-hidden rounded-lg border border-line bg-surface">
+          {filteredStudents.length === 0 ? (
+            <div className="p-4">
+              <StickyNote color="azure" className="mx-auto max-w-sm items-center text-center">
+                <Users className="mb-2 h-5 w-5 text-ink-2" strokeWidth={1.5} aria-hidden="true" />
+                <h2 className="font-hand text-lg leading-tight text-ink">
+                  {allStudents.length === 0 ? 'No students enrolled yet' : 'No students found'}
+                </h2>
+                <p className="mt-1 text-sm text-ink">
+                  {allStudents.length === 0 ? 'Add students or import a list to get started' : 'Try a different search or filter'}
+                </p>
+              </StickyNote>
+            </div>
+          ) : (
+            <>
+              <p className="border-b border-line px-4 py-2 text-xs text-ink-2 md:hidden">Swipe sideways to see every column.</p>
+              <div role="region" aria-label="Students table" tabIndex={0} className="overflow-x-auto">
+                <table className="w-full min-w-[800px] text-sm">
+                  <caption className="sr-only">Students with their course, section, status and enrolment date</caption>
+                  <thead className="bg-surface-hover">
+                    <tr>
+                      <th scope="col" className="px-2 py-1 text-left">
+                        <label className={CELL_CHECK}>
+                          <input
+                            type="checkbox"
+                            aria-label="Select all students"
+                            checked={filteredStudents.length > 0 && selectedStudents.size === filteredStudents.length}
+                            onChange={toggleSelectAll}
+                            className="h-4 w-4 rounded border-line-strong"
+                          />
+                        </label>
+                      </th>
+                      <th scope="col" className="px-3 py-3 text-left text-sm font-medium text-ink-2">Student</th>
+                      <th scope="col" className="px-3 py-3 text-left text-sm font-medium text-ink-2">Course</th>
+                      <th scope="col" className="px-3 py-3 text-left text-sm font-medium text-ink-2">Section</th>
+                      <th scope="col" className="px-3 py-3 text-left text-sm font-medium text-ink-2">Status</th>
+                      <th scope="col" className="px-3 py-3 text-left text-sm font-medium text-ink-2">Enrolled</th>
+                      <th scope="col" className="px-3 py-3 text-left text-sm font-medium text-ink-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {filteredStudents.map((student) => {
+                      const initials = student.name.trim()
+                        ? student.name.split(' ').map(n => n[0]).join('').toUpperCase()
+                        : '?';
+                      const isEditing = editingId === student.id;
+                      const isSelected = selectedStudents.has(student.id);
+                      const badge = statusBadgeProps(student.status);
+                      return (
+                        <tr key={student.id} className={cx('hover:bg-surface-hover', isSelected && 'bg-accent-tint')}>
+                          <td className="px-2 py-1">
+                            <label className={CELL_CHECK}>
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${student.name}`}
+                                checked={isSelected}
+                                onChange={() => toggleSelectStudent(student.id)}
+                                className="h-4 w-4 rounded border-line-strong"
+                              />
+                            </label>
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-3">
+                              <div aria-hidden="true" className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-accent-500 font-medium text-white">
+                                {initials}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium text-ink">{student.name}</p>
+                                <p className="break-all text-sm text-ink-2">{student.email}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className="inline-flex h-6 items-center rounded bg-accent-tint px-2 text-xs font-semibold text-accent-700">{student.courseCode}</span>
+                          </td>
+                          <td className="px-3 py-3">
+                            {isEditing ? (
+                              <select
+                                aria-label={`Section for ${student.name}`}
+                                value={editSection}
+                                onChange={(e) => setEditSection(e.target.value)}
+                                className={SELECT_INLINE}
+                              >
+                                <option value="">Unassigned</option>
+                                {getCourseSections(editCourseId).map(s => (
+                                  <option key={s} value={s}>{s}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-ink-2">{student.section === '-' ? '-' : `Section ${student.section}`}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-3">
+                            {isEditing ? (
+                              <select
+                                aria-label={`Status for ${student.name}`}
+                                value={editStatus}
+                                onChange={(e) => setEditStatus(e.target.value)}
+                                className={SELECT_INLINE}
+                              >
+                                <option value="active">Active</option>
+                                <option value="dropped">Dropped</option>
+                                <option value="completed">Completed</option>
+                              </select>
+                            ) : (
+                              <ChalkBadge label={badge.label} icon={badge.icon} tone={badge.tone} />
+                            )}
+                          </td>
+                          <td className="px-3 py-3 text-sm text-ink-2">{formatTimeAgo(student.enrolledAt)}</td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-1">
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => saveEdit(student.id)}
+                                    disabled={saving}
+                                    className={ICON_BUTTON_DONE}
+                                    title="Save"
+                                    aria-label="Save"
+                                  >
+                                    <Check className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={cancelEdit}
+                                    className={ICON_BUTTON}
+                                    title="Cancel"
+                                    aria-label="Cancel"
+                                  >
+                                    <X className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button type="button" onClick={() => startEdit(student)} className={ICON_BUTTON} title="Edit enrollment" aria-label="Edit enrollment">
+                                    <Edit3 className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                                  </button>
+                                  <button type="button" onClick={() => setViewingStudent(student)} className={ICON_BUTTON} title="View student" aria-label="View student">
+                                    <Eye className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                                  </button>
+                                  <button type="button" onClick={() => openMailto(student.email)} className={ICON_BUTTON} title="Email student" aria-label="Email student">
+                                    <Mail className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </section>
+      </>
     );
   }
 
   return (
-    <>
-      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Students</h1>
-          <p className="text-gray-600 mt-1">Manage and monitor student progress across all courses</p>
-        </div>
-        <div className="flex items-center gap-3 self-start flex-wrap">
-          {selectedStudents.size > 0 && (
-            <button
-              onClick={() => setShowBulkEdit(true)}
-              className="bg-amber-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-amber-600 transition flex items-center space-x-2"
-            >
-              <Edit3 className="w-5 h-5" />
-              <span>Edit Selected ({selectedStudents.size})</span>
-            </button>
-          )}
-          <button
-            onClick={() => setShowBulkImport(true)}
-            className="bg-white text-indigo-600 border-2 border-indigo-600 px-4 py-2 rounded-lg font-medium hover:bg-indigo-50 transition flex items-center space-x-2"
-          >
-            <Upload className="w-5 h-5" />
-            <span>Bulk Import</span>
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center space-x-2"
-          >
-            <UserPlus className="w-5 h-5" />
-            <span>Add Student</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow-sm border p-4">
-          <p className="text-sm text-gray-600">Total Enrolled</p>
-          <p className="text-2xl font-bold text-gray-900">{allStudents.length}</p>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border p-4">
-          <p className="text-sm text-gray-600">Active</p>
-          <p className="text-2xl font-bold text-green-600">{allStudents.filter(s => s.status === 'active').length}</p>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border p-4">
-          <p className="text-sm text-gray-600">Dropped</p>
-          <p className="text-2xl font-bold text-red-600">{allStudents.filter(s => s.status === 'dropped').length}</p>
-        </div>
-      </div>
-
-      {/* Search & Filter */}
-      <div className="bg-white rounded-lg shadow-sm border p-4 mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search students by name or email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <select
-              value={filterCourse}
-              onChange={(e) => setFilterCourse(e.target.value)}
-              className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 appearance-none bg-white min-w-[150px]"
-            >
-              <option value="all">All Courses</option>
-              {courses.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
-            </select>
-          </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 appearance-none bg-white min-w-[120px]"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="dropped">Dropped</option>
-            <option value="completed">Completed</option>
-          </select>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`px-4 py-2 border rounded-lg font-medium transition flex items-center space-x-2 ${showFilters ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
-          >
-            <Calendar className="w-4 h-4" />
-            <span>Date</span>
-          </button>
-        </div>
-        {showFilters && (
-          <div className="mt-4 pt-4 border-t flex flex-wrap items-center gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Enrolled From</label>
-              <input
-                type="date"
-                value={filterDateFrom}
-                onChange={(e) => setFilterDateFrom(e.target.value)}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Enrolled To</label>
-              <input
-                type="date"
-                value={filterDateTo}
-                onChange={(e) => setFilterDateTo(e.target.value)}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            {(filterDateFrom || filterDateTo) && (
-              <button
-                onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); }}
-                className="text-sm text-indigo-600 hover:text-indigo-800 mt-4"
-              >
-                Clear dates
-              </button>
+    <div className="space-y-4">
+      <ChalkboardHeader
+        size="compact"
+        titleId="students-title"
+        title="Students"
+        subtitle="Manage and monitor student progress across all courses"
+        actions={
+          <>
+            {selectedStudents.size > 0 && (
+              <ClassroomButton onChalk icon={Edit3} onClick={() => setShowBulkEdit(true)}>
+                Edit Selected ({selectedStudents.size})
+              </ClassroomButton>
             )}
-          </div>
-        )}
-      </div>
+            <ClassroomButton onChalk icon={Upload} onClick={() => setShowBulkImport(true)}>
+              Bulk Import
+            </ClassroomButton>
+            <ClassroomButton onChalk icon={UserPlus} onClick={() => setShowAddModal(true)}>
+              Add Student
+            </ClassroomButton>
+          </>
+        }
+      />
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px]">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left">
-                  <input
-                    type="checkbox"
-                    checked={filteredStudents.length > 0 && selectedStudents.size === filteredStudents.length}
-                    onChange={toggleSelectAll}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Student</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Course</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Section</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Enrolled</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filteredStudents.map((student) => {
-                const initials = student.name.trim()
-                  ? student.name.split(' ').map(n => n[0]).join('').toUpperCase()
-                  : '?';
-                const isEditing = editingId === student.id;
-                return (
-                  <tr key={student.id} className={`hover:bg-gray-50 ${selectedStudents.has(student.id) ? 'bg-indigo-50' : ''}`}>
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedStudents.has(student.id)}
-                        onChange={() => toggleSelectStudent(student.id)}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium">
-                          {initials}
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{student.name}</p>
-                          <p className="text-sm text-gray-500">{student.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">{student.courseCode}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {isEditing ? (
-                        <select
-                          value={editSection}
-                          onChange={(e) => setEditSection(e.target.value)}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 w-28"
-                        >
-                          <option value="">Unassigned</option>
-                          {getCourseSections(editCourseId).map(s => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-gray-600">{student.section === '-' ? '-' : `Section ${student.section}`}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {isEditing ? (
-                        <select
-                          value={editStatus}
-                          onChange={(e) => setEditStatus(e.target.value)}
-                          className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 w-28"
-                        >
-                          <option value="active">Active</option>
-                          <option value="dropped">Dropped</option>
-                          <option value="completed">Completed</option>
-                        </select>
-                      ) : (
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          student.status === 'active' ? 'bg-green-100 text-green-700' :
-                          student.status === 'dropped' ? 'bg-red-100 text-red-700' :
-                          'bg-gray-100 text-gray-700'
-                        }`}>
-                          {student.status.charAt(0).toUpperCase() + student.status.slice(1)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{formatTimeAgo(student.enrolledAt)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center space-x-2">
-                        {isEditing ? (
-                          <>
-                            <button
-                              onClick={() => saveEdit(student.id)}
-                              disabled={saving}
-                              className="p-1 bg-green-100 hover:bg-green-200 rounded text-green-700 transition"
-                              title="Save"
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={cancelEdit}
-                              className="p-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-600 transition"
-                              title="Cancel"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button onClick={() => startEdit(student)} className="p-1 hover:bg-gray-100 rounded text-gray-600" title="Edit enrollment">
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => setViewingStudent(student)} className="p-1 hover:bg-gray-100 rounded text-gray-600" title="View student">
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => openMailto(student.email)} className="p-1 hover:bg-gray-100 rounded text-gray-600" title="Email student">
-                              <Mail className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredStudents.length === 0 && (
-                <tr><td colSpan="7" className="px-4 py-8 text-center text-gray-400">No students found</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {body}
 
       {/* Student Detail Modal */}
       {viewingStudent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-scaleIn">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-xl font-bold text-gray-900">Student Details</h2>
-              <button onClick={() => setViewingStudent(null)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
+        <ClassroomDialog
+          titleId="students-detail-title"
+          size="lg"
+          title="Student Details"
+          onClose={closeViewing}
+          footer={
+            <>
+              <ClassroomButton variant="primary" className="flex-1" icon={Mail} onClick={() => openMailto(viewingStudent.email)}>
+                Send Email
+              </ClassroomButton>
+              <ClassroomButton className="flex-1" onClick={closeViewing}>Close</ClassroomButton>
+            </>
+          }
+        >
+          <div className="flex items-center gap-4">
+            <div aria-hidden="true" className="flex h-14 w-14 flex-none items-center justify-center rounded-full bg-accent-500 text-xl font-semibold text-white">
+              {viewingStudent.name.trim() ? viewingStudent.name.split(' ').map(n => n[0]).join('').toUpperCase() : '?'}
             </div>
-            <div className="p-6 space-y-4">
-              <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                  {viewingStudent.name.trim() ? viewingStudent.name.split(' ').map(n => n[0]).join('').toUpperCase() : '?'}
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{viewingStudent.name}</h3>
-                  <p className="text-gray-500">{viewingStudent.email}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">Course</p>
-                  <p className="font-medium text-gray-900">{viewingStudent.courseCode}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">Section</p>
-                  <p className="font-medium text-gray-900">{viewingStudent.section === '-' ? 'Unassigned' : `Section ${viewingStudent.section}`}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">Status</p>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    viewingStudent.status === 'active' ? 'bg-green-100 text-green-700' :
-                    viewingStudent.status === 'dropped' ? 'bg-red-100 text-red-700' :
-                    'bg-gray-100 text-gray-700'
-                  }`}>
-                    {viewingStudent.status.charAt(0).toUpperCase() + viewingStudent.status.slice(1)}
-                  </span>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">Enrolled</p>
-                  <p className="font-medium text-gray-900">{formatTimeAgo(viewingStudent.enrolledAt)}</p>
-                </div>
-              </div>
-              {(() => {
-                const otherEnrollments = allStudents.filter(s => s.studentId === viewingStudent.studentId && s.id !== viewingStudent.id);
-                if (otherEnrollments.length === 0) return null;
-                return (
-                  <div>
-                    <h4 className="font-medium text-gray-700 mb-2">Other Enrollments</h4>
-                    <div className="space-y-2">
-                      {otherEnrollments.map(e => (
-                        <div key={e.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">{e.courseCode}</span>
-                          <span className="text-sm text-gray-500">Section {e.section}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-            <div className="p-6 border-t flex gap-3">
-              <button
-                onClick={() => openMailto(viewingStudent.email)}
-                className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center justify-center space-x-2"
-              >
-                <Mail className="w-4 h-4" /><span>Send Email</span>
-              </button>
-              <button onClick={() => setViewingStudent(null)} className="flex-1 border-2 border-gray-200 py-2 rounded-lg font-medium hover:bg-gray-50 transition">Close</button>
+            <div className="min-w-0">
+              <h3 className="break-words text-lg font-semibold text-ink">{viewingStudent.name}</h3>
+              <p className="break-all text-sm text-ink-2">{viewingStudent.email}</p>
             </div>
           </div>
-        </div>
+          <dl className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-line bg-surface-hover p-3">
+              <dt className="text-xs text-ink-2">Course</dt>
+              <dd className="mt-1 font-medium text-ink">{viewingStudent.courseCode}</dd>
+            </div>
+            <div className="rounded-lg border border-line bg-surface-hover p-3">
+              <dt className="text-xs text-ink-2">Section</dt>
+              <dd className="mt-1 font-medium text-ink">{viewingStudent.section === '-' ? 'Unassigned' : `Section ${viewingStudent.section}`}</dd>
+            </div>
+            <div className="rounded-lg border border-line bg-surface-hover p-3">
+              <dt className="text-xs text-ink-2">Status</dt>
+              <dd className="mt-1">
+                <ChalkBadge {...viewingBadge} />
+              </dd>
+            </div>
+            <div className="rounded-lg border border-line bg-surface-hover p-3">
+              <dt className="text-xs text-ink-2">Enrolled</dt>
+              <dd className="mt-1 font-medium text-ink">{formatTimeAgo(viewingStudent.enrolledAt)}</dd>
+            </div>
+          </dl>
+          {(() => {
+            const otherEnrollments = allStudents.filter(s => s.studentId === viewingStudent.studentId && s.id !== viewingStudent.id);
+            if (otherEnrollments.length === 0) return null;
+            return (
+              <section aria-labelledby="students-other-title">
+                <h4 id="students-other-title" className="mb-2 font-medium text-ink">Other Enrollments</h4>
+                <ul className="space-y-2">
+                  {otherEnrollments.map(e => (
+                    <li key={e.id} className="flex items-center justify-between gap-3 rounded border border-line bg-surface-hover p-2">
+                      <span className="inline-flex h-6 items-center rounded bg-accent-tint px-2 text-xs font-semibold text-accent-700">{e.courseCode}</span>
+                      <span className="text-sm text-ink-2">Section {e.section}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })()}
+        </ClassroomDialog>
       )}
 
       {/* Bulk Import Modal */}
@@ -558,158 +613,143 @@ export default function LecturerStudentsPage() {
 
       {/* Add Student Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-backdropFade">
-          <div className="bg-white rounded-xl w-full max-w-md animate-scaleIn">
-            <div className="p-6 border-b">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-gray-900">Add Students</h3>
-                <button onClick={closeAddModal} className="p-1 hover:bg-gray-100 rounded">
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
-              </div>
-            </div>
-            <div className="p-6 space-y-4">
-              {addResult && (
-                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
-                  {addResult.enrolled} student(s) enrolled successfully.
-                  {addResult.already_enrolled > 0 && ` ${addResult.already_enrolled} already enrolled.`}
-                  {addResult.errors > 0 && ` ${addResult.errors} failed.`}
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Search Students</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text" value={studentQuery}
-                    onChange={(e) => handleSearchStudent(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Search by name or username (3+ letters)..."
-                  />
-                </div>
-                {studentResults.length > 0 && (
-                  <div className="mt-2 border rounded-lg max-h-40 overflow-y-auto">
-                    {studentResults.map(u => {
-                      const isSelected = selectedStudentIds.has(u.id);
-                      return (
-                        <button
-                          key={u.id}
-                          onClick={() => toggleStudentSelection(u.id)}
-                          className={`w-full text-left px-3 py-2 hover:bg-indigo-50 text-sm flex items-center space-x-2 ${isSelected ? 'bg-indigo-50' : ''}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {}}
-                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <span className="font-medium">{u.first_name} {u.last_name}</span>
-                            <span className="text-gray-500 ml-2 text-xs">{u.email_hint || u.email}</span>
-                            {u.role && u.role !== 'student' && (
-                              <span className="ml-2 px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">{u.role}</span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                {selectedStudentIds.size > 0 && (
-                  <p className="text-sm text-green-600 mt-1">
-                    {selectedStudentIds.size} student{selectedStudentIds.size !== 1 ? 's' : ''} selected
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
-                <select value={courseId} onChange={(e) => setCourseId(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
-                  <option value="">Select a course</option>
-                  {courses.map(c => <option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Section (optional)</label>
-                {courseId && getCourseSections(courseId).length > 0 ? (
-                  <select
-                    value={section}
-                    onChange={(e) => setSection(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">No section</option>
-                    {getCourseSections(courseId).map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input type="text" value={section} onChange={(e) => setSection(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="e.g., A" />
-                )}
-              </div>
-            </div>
-            <div className="p-6 border-t flex space-x-3">
-              <button onClick={closeAddModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium">Cancel</button>
-              <button onClick={handleAddStudent} disabled={adding || selectedStudentIds.size === 0 || !courseId} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium disabled:opacity-50">
+        <ClassroomDialog
+          titleId="students-add-title"
+          title="Add Students"
+          onClose={closeAddModal}
+          footer={
+            <>
+              <ClassroomButton className="flex-1" onClick={closeAddModal}>Cancel</ClassroomButton>
+              <ClassroomButton
+                variant="primary"
+                className="flex-1"
+                onClick={handleAddStudent}
+                disabled={adding || selectedStudentIds.size === 0 || !courseId}
+              >
                 {adding ? 'Enrolling...' : `Add ${selectedStudentIds.size || ''} Student${selectedStudentIds.size !== 1 ? 's' : ''}`}
-              </button>
-            </div>
+              </ClassroomButton>
+            </>
+          }
+        >
+          {addResult && (
+            <ClassroomAlert tone="success">
+              {addResult.enrolled} student(s) enrolled successfully.
+              {addResult.already_enrolled > 0 && ` ${addResult.already_enrolled} already enrolled.`}
+              {addResult.errors > 0 && ` ${addResult.errors} failed.`}
+            </ClassroomAlert>
+          )}
+          <div>
+            <ClassroomField
+              type="search"
+              label="Search Students"
+              hint="Type three or more letters to search by name or username"
+              value={studentQuery}
+              onChange={(e) => handleSearchStudent(e.target.value)}
+              placeholder="Name or username"
+            />
+            {studentResults.length > 0 && (
+              <ul aria-label="Search results" className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded border border-line p-1">
+                {studentResults.map(u => {
+                  const isSelected = selectedStudentIds.has(u.id);
+                  return (
+                    <li key={u.id}>
+                      <button
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => toggleStudentSelection(u.id)}
+                        className={cx('flex min-h-[44px] w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-ink hover:bg-surface-hover', isSelected && 'bg-accent-tint')}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="font-medium">{u.first_name} {u.last_name}</span>
+                          <span className="ml-2 break-all text-xs text-ink-2">{u.email_hint || u.email}</span>
+                        </span>
+                        {u.role && u.role !== 'student' && <ChalkBadge label={u.role} icon={Users} />}
+                        {isSelected && <Check className="h-4 w-4 flex-none text-accent-700" strokeWidth={1.5} aria-hidden="true" />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {selectedStudentIds.size > 0 && (
+              <p className="mt-1 text-sm text-success">
+                {selectedStudentIds.size} student{selectedStudentIds.size !== 1 ? 's' : ''} selected
+              </p>
+            )}
           </div>
-        </div>
+          <ClassroomField
+            as="select"
+            label="Course"
+            value={courseId}
+            onChange={(e) => setCourseId(e.target.value)}
+          >
+            <option value="">Select a course</option>
+            {courses.map(c => <option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
+          </ClassroomField>
+          {courseId && getCourseSections(courseId).length > 0 ? (
+            <ClassroomField
+              as="select"
+              label="Section (optional)"
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+            >
+              <option value="">No section</option>
+              {getCourseSections(courseId).map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </ClassroomField>
+          ) : (
+            <ClassroomField
+              label="Section (optional)"
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+              placeholder="e.g., A"
+            />
+          )}
+        </ClassroomDialog>
       )}
 
       {/* Bulk Edit Modal */}
       {showBulkEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md animate-scaleIn">
-            <div className="p-6 border-b">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">Bulk Edit Students</h3>
-                  <p className="text-sm text-gray-500 mt-1">{selectedStudents.size} student{selectedStudents.size !== 1 ? 's' : ''} selected</p>
-                </div>
-                <button onClick={() => setShowBulkEdit(false)} className="p-1 hover:bg-gray-100 rounded">
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
-              </div>
-            </div>
-            <div className="p-6 space-y-4">
-              <p className="text-sm text-gray-600">Leave a field empty to keep the current value unchanged.</p>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Change Section</label>
-                <input
-                  type="text"
-                  value={bulkSection}
-                  onChange={(e) => setBulkSection(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="New section (e.g., A)"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Change Status</label>
-                <select
-                  value={bulkStatus}
-                  onChange={(e) => setBulkStatus(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">No change</option>
-                  <option value="active">Active</option>
-                  <option value="dropped">Dropped</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-            </div>
-            <div className="p-6 border-t flex space-x-3">
-              <button onClick={() => setShowBulkEdit(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium">Cancel</button>
-              <button
+        <ClassroomDialog
+          titleId="students-bulk-title"
+          title="Bulk Edit Students"
+          subtitle={`${selectedStudents.size} student${selectedStudents.size !== 1 ? 's' : ''} selected`}
+          onClose={closeBulkEdit}
+          footer={
+            <>
+              <ClassroomButton className="flex-1" onClick={closeBulkEdit}>Cancel</ClassroomButton>
+              <ClassroomButton
+                variant="primary"
+                className="flex-1"
                 onClick={handleBulkEdit}
                 disabled={bulkSaving || (!bulkSection && !bulkStatus)}
-                className="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition font-medium disabled:opacity-50"
               >
                 {bulkSaving ? 'Updating...' : 'Apply Changes'}
-              </button>
-            </div>
-          </div>
-        </div>
+              </ClassroomButton>
+            </>
+          }
+        >
+          <p className="text-sm text-ink-2">Leave a field empty to keep the current value unchanged.</p>
+          <ClassroomField
+            label="Change Section"
+            value={bulkSection}
+            onChange={(e) => setBulkSection(e.target.value)}
+            placeholder="New section (e.g., A)"
+          />
+          <ClassroomField
+            as="select"
+            label="Change Status"
+            value={bulkStatus}
+            onChange={(e) => setBulkStatus(e.target.value)}
+          >
+            <option value="">No change</option>
+            <option value="active">Active</option>
+            <option value="dropped">Dropped</option>
+            <option value="completed">Completed</option>
+          </ClassroomField>
+        </ClassroomDialog>
       )}
-    </>
+    </div>
   );
 }

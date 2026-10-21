@@ -1,10 +1,36 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Search, Users, Trash2, ChevronDown, Link2, Copy, Check, Clock, Shield } from 'lucide-react';
+import React, { useState, useEffect, useRef, useId } from 'react';
+import { Search, Users, Trash2, ChevronDown, Link2, Copy, Check, Clock, X, Crown, Eye, MessageSquare, Pencil, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usersApi, sharesApi, boardsApi } from '../../services/api';
+import { ClassroomDialog, ClassroomAlert, ClassroomButton, ClassroomField, ChalkBadge } from '../classroom';
+
+// Static lookup maps: Tailwind only sees literal class names. Permission is always label plus icon.
+const PERMISSION_BADGE = {
+  owner: { label: 'Owner', icon: Crown },
+  edit: { label: 'Editor', icon: Pencil },
+  comment: { label: 'Commenter', icon: MessageSquare },
+  view: { label: 'Viewer', icon: Eye },
+};
+
+// Unknown permissions read as Viewer, as before.
+function permissionBadge(permission) {
+  return PERMISSION_BADGE[permission] || PERMISSION_BADGE.view;
+}
+
+// Icon-only controls sit inside a relative wrapper that holds only the control, so centring uses top-1/2.
+const ICON_CENTRED = 'pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3';
+
+// 44 px on phones, 32 px on desktop.
+const ICON_BTN = 'btn-motion flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-ink-2 md:h-8 md:w-8';
+
+const TABS = [
+  { id: 'members', label: 'Members', icon: Users },
+  { id: 'invite', label: 'Invite Links', icon: Link2 },
+];
 
 export default function ShareModal({ isOpen, onClose, boardId, boardName }) {
   const { user } = useAuth();
+  const uid = useId();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [members, setMembers] = useState([]);
@@ -19,7 +45,6 @@ export default function ShareModal({ isOpen, onClose, boardId, boardName }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const searchRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -122,7 +147,7 @@ export default function ShareModal({ isOpen, onClose, boardId, boardName }) {
       setSearchQuery('');
       setSearchResults([]);
       const displayName = targetUser.first_name ? `${targetUser.first_name} ${targetUser.last_name}` : targetUser.username;
-      const permLabel = { edit: 'Editor', comment: 'Commenter', view: 'Viewer' }[selectedPermission] || 'Viewer';
+      const permLabel = permissionBadge(selectedPermission).label;
       setSuccess(`${displayName} added as ${permLabel}`);
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -186,317 +211,367 @@ export default function ShareModal({ isOpen, onClose, boardId, boardName }) {
     setTimeout(() => setCopiedLink(null), 2000);
   };
 
+  // Arrow keys move between the two tabs (roving tabindex), as the tab pattern asks.
+  const onTabKeyDown = (event) => {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+    event.preventDefault();
+    const next = activeTab === 'members' ? 'invite' : 'members';
+    setActiveTab(next);
+    const target = document.getElementById(`${uid}_tab_${next}`);
+    if (target) target.focus();
+  };
+
   if (!isOpen) return null;
 
   const isOwner = members.find(m => m.permission === 'owner')?.user.id === user?.id;
 
+  const footer = (
+    <ClassroomButton variant="primary" className="w-full sm:w-auto" onClick={onClose}>
+      Done
+    </ClassroomButton>
+  );
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-backdropFade" onClick={onClose} onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} role="dialog" aria-modal="true" aria-label="Share board">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-hidden flex flex-col animate-scaleIn" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <div>
-            <h3 className="font-semibold text-gray-900">Share Board</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{boardName}</p>
-          </div>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X className="w-5 h-5" />
-          </button>
+    <ClassroomDialog
+      titleId={`${uid}-title`}
+      title="Share Board"
+      subtitle={boardName}
+      onClose={onClose}
+      size="md"
+      bodyFlush
+      dismissOnScrim
+      footer={footer}
+    >
+      {isOwner && (
+        <div role="tablist" aria-label="Share sections" className="flex border-b border-line">
+          {TABS.map((tab) => {
+            const selected = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                id={`${uid}_tab_${tab.id}`}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                aria-controls={`${uid}-panel`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setActiveTab(tab.id)}
+                onKeyDown={onTabKeyDown}
+                className={`btn-motion flex min-h-[44px] flex-1 items-center justify-center gap-1.5 border-b-2 px-3 text-sm font-medium md:min-h-[32px] ${
+                  selected ? 'border-accent text-ink' : 'border-transparent text-ink-2 hover:text-ink'
+                }`}
+              >
+                <Icon className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
+      )}
 
-        {/* Tabs */}
-        {isOwner && (
-          <div className="flex border-b">
-            <button
-              onClick={() => setActiveTab('members')}
-              className={`flex-1 px-4 py-2.5 text-sm font-medium ${activeTab === 'members' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              <Users className="w-4 h-4 inline mr-1" />
-              Members
-            </button>
-            <button
-              onClick={() => setActiveTab('invite')}
-              className={`flex-1 px-4 py-2.5 text-sm font-medium ${activeTab === 'invite' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              <Link2 className="w-4 h-4 inline mr-1" />
-              Invite Links
-            </button>
-          </div>
-        )}
-
+      <div
+        id={`${uid}-panel`}
+        role={isOwner ? 'tabpanel' : undefined}
+        aria-labelledby={isOwner ? `${uid}_tab_${activeTab}` : undefined}
+        className="space-y-4 p-4"
+      >
         {activeTab === 'members' ? (
           <>
             {/* Search + Add */}
             {isOwner && (
-              <div className="p-4 border-b">
-                <div className="flex items-center space-x-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      ref={searchRef}
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search by name or username (3+ letters)..."
-                      className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <select
+              <section className="space-y-3">
+                <div className="flex items-end gap-2">
+                  <ClassroomField
+                    id={`${uid}-search`}
+                    label="Add people"
+                    className="min-w-0 flex-1"
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by name or username (3+ letters)..."
+                    autoComplete="off"
+                    controlClassName="pl-9"
+                    endAdornment={(
+                      <span aria-hidden="true" className={ICON_CENTRED}>
+                        <Search className="h-4 w-4" strokeWidth={1.5} />
+                      </span>
+                    )}
+                  />
+                  <ClassroomField
+                    id={`${uid}-add-role`}
+                    as="select"
+                    label="Role"
+                    className="w-32 flex-none"
                     value={selectedPermission}
                     onChange={(e) => setSelectedPermission(e.target.value)}
-                    className="px-2 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="view">Viewer</option>
                     <option value="comment">Commenter</option>
                     <option value="edit">Editor</option>
-                  </select>
+                  </ClassroomField>
                 </div>
 
-                {/* Search Results Dropdown */}
+                {/* Search Results */}
                 {searchResults.length > 0 && (
-                  <div className="mt-2 border rounded-lg bg-white shadow-sm max-h-40 overflow-y-auto">
+                  <ul aria-label="Matching people" className="max-h-40 overflow-y-auto rounded border border-line bg-surface">
                     {searchResults.map(result => (
-                      <button
-                        key={result.id}
-                        onClick={() => handleAddMember(result)}
-                        className="w-full flex items-center space-x-3 px-3 py-2 hover:bg-indigo-50 text-left"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs flex-shrink-0">
-                          {(result.first_name?.[0] || result.username?.[0] || '?').toUpperCase()}
-                          {(result.last_name?.[0] || '').toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {result.first_name && result.last_name
-                              ? `${result.first_name} ${result.last_name}`
-                              : result.username}
-                          </p>
-                          <p className="text-xs text-gray-500 truncate">{result.email_hint || result.email}</p>
-                        </div>
-                        <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded capitalize flex-shrink-0">{result.role}</span>
-                      </button>
+                      <li key={result.id}>
+                        <button
+                          type="button"
+                          onClick={() => handleAddMember(result)}
+                          className="btn-motion flex min-h-[44px] w-full items-center gap-3 px-3 py-2 text-left hover:bg-surface-hover md:min-h-[32px]"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accent text-xs font-medium text-white"
+                          >
+                            {(result.first_name?.[0] || result.username?.[0] || '?').toUpperCase()}
+                            {(result.last_name?.[0] || '').toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium text-ink">
+                              {result.first_name && result.last_name
+                                ? `${result.first_name} ${result.last_name}`
+                                : result.username}
+                            </span>
+                            <span className="block truncate text-xs text-ink-2">{result.email_hint || result.email}</span>
+                          </span>
+                          <span className="flex-shrink-0 rounded-sm bg-surface-hover px-1.5 py-0.5 text-xs capitalize text-ink-2">
+                            {result.role}
+                          </span>
+                        </button>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
 
                 {searchQuery && searchResults.length === 0 && (
-                  <p className="mt-2 text-xs text-gray-500 text-center py-2">No users found</p>
+                  <p className="py-2 text-center text-xs text-ink-2">No users found</p>
                 )}
 
-                {error && (
-                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
-                    {error}
-                  </div>
-                )}
-                {success && (
-                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
-                    {success}
-                  </div>
-                )}
-              </div>
+                {error && <ClassroomAlert>{error}</ClassroomAlert>}
+                {success && <ClassroomAlert tone="success">{success}</ClassroomAlert>}
+              </section>
             )}
 
             {/* Members List */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="flex items-center space-x-1 mb-3">
-                <Users className="w-4 h-4 text-gray-500" />
-                <span className="text-sm font-medium text-gray-700">Members ({members.length})</span>
-              </div>
-              <div className="space-y-2">
-                {members.map(member => (
-                  <div key={member.id} className="flex items-center justify-between py-2">
-                    <div className="flex items-center space-x-3 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs flex-shrink-0">
-                        {member.user.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {member.user.name}
-                          {member.user.id === user?.id && <span className="text-gray-400 ml-1">(You)</span>}
-                        </p>
-                        <p className="text-xs text-gray-500 truncate">{member.user.email}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-1 flex-shrink-0">
-                      {member.permission === 'owner' ? (
-                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-medium">Owner</span>
-                      ) : isOwner ? (
-                        <>
-                          <div className="relative">
-                            <button
-                              onClick={() => setShowPermDropdown(showPermDropdown === member.id ? null : member.id)}
-                              className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded hover:bg-gray-200 flex items-center space-x-1"
-                            >
-                              <span className="capitalize">{{ edit: 'Editor', comment: 'Commenter', view: 'Viewer' }[member.permission] || 'Viewer'}</span>
-                              <ChevronDown className="w-3 h-3" />
-                            </button>
-                            {showPermDropdown === member.id && (
-                              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border py-1 z-50 w-28 animate-slideDown">
-                                <button
-                                  onClick={() => handleChangePermission(member.id, 'view')}
-                                  className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 ${member.permission === 'view' ? 'font-semibold text-indigo-600' : ''}`}
-                                >
-                                  Viewer
-                                </button>
-                                <button
-                                  onClick={() => handleChangePermission(member.id, 'comment')}
-                                  className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 ${member.permission === 'comment' ? 'font-semibold text-indigo-600' : ''}`}
-                                >
-                                  Commenter
-                                </button>
-                                <button
-                                  onClick={() => handleChangePermission(member.id, 'edit')}
-                                  className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 ${member.permission === 'edit' ? 'font-semibold text-indigo-600' : ''}`}
-                                >
-                                  Editor
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => handleRemoveMember(member.id)}
-                            className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
-                            title="Remove member"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      ) : (
-                        <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded capitalize">
-                          {{ edit: 'Editor', comment: 'Commenter', view: 'Viewer' }[member.permission] || 'Viewer'}
+            <section aria-labelledby={`${uid}-members`} className="space-y-2">
+              <h3 id={`${uid}-members`} className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                <Users className="h-4 w-4 text-ink-2" strokeWidth={1.5} aria-hidden="true" />
+                <span>Members ({members.length})</span>
+              </h3>
+              <ul className="divide-y divide-line">
+                {members.map(member => {
+                  const badge = permissionBadge(member.permission);
+                  return (
+                    <li key={member.id} className="flex items-center justify-between gap-3 py-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          aria-hidden="true"
+                          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-accent text-xs font-medium text-white"
+                        >
+                          {member.user.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
                         </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-ink">
+                            {member.user.name}
+                            {member.user.id === user?.id && <span className="ml-1 text-ink-2">(You)</span>}
+                          </p>
+                          <p className="truncate text-xs text-ink-2">{member.user.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-shrink-0 items-center gap-1">
+                        {member.permission === 'owner' ? (
+                          <ChalkBadge icon={badge.icon} label={badge.label} />
+                        ) : isOwner ? (
+                          <>
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={() => setShowPermDropdown(showPermDropdown === member.id ? null : member.id)}
+                                aria-haspopup="true"
+                                aria-expanded={showPermDropdown === member.id}
+                                className="btn-motion flex h-11 items-center gap-1 rounded border border-line-strong bg-surface px-2 text-xs font-medium text-ink hover:bg-surface-hover md:h-8"
+                              >
+                                <span>{badge.label}</span>
+                                <ChevronDown className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+                              </button>
+                              {showPermDropdown === member.id && (
+                                <div className="absolute right-0 top-full z-50 mt-1 w-32 rounded-lg border border-line bg-surface py-1 shadow-pop">
+                                  {[
+                                    { value: 'view', label: 'Viewer' },
+                                    { value: 'comment', label: 'Commenter' },
+                                    { value: 'edit', label: 'Editor' },
+                                  ].map((option) => {
+                                    const current = member.permission === option.value;
+                                    return (
+                                      <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => handleChangePermission(member.id, option.value)}
+                                        aria-current={current ? 'true' : undefined}
+                                        className={`btn-motion flex min-h-[44px] w-full items-center px-3 text-left text-xs hover:bg-surface-hover md:min-h-[32px] ${
+                                          current ? 'font-semibold text-accent' : 'text-ink'
+                                        }`}
+                                      >
+                                        {option.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMember(member.id)}
+                              className={`${ICON_BTN} hover:bg-danger-tint hover:text-danger`}
+                              title="Remove member"
+                              aria-label="Remove member"
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                            </button>
+                          </>
+                        ) : (
+                          <ChalkBadge icon={badge.icon} label={badge.label} />
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
           </>
         ) : (
           /* Invite Links Tab */
-          <div className="flex-1 overflow-y-auto p-4">
+          <>
             {/* Create New Invite */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">Create Invite Link</h4>
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <label className="text-xs text-gray-600 w-20">Permission</label>
-                  <select
-                    value={invitePermission}
-                    onChange={(e) => setInvitePermission(e.target.value)}
-                    className="flex-1 px-2 py-1.5 border rounded text-sm bg-white"
-                  >
-                    <option value="view">View Only</option>
-                    <option value="comment">Can Comment</option>
-                    <option value="edit">Can Edit</option>
-                  </select>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <label className="text-xs text-gray-600 w-20">Expires in</label>
-                  <select
-                    value={inviteExpiry}
-                    onChange={(e) => setInviteExpiry(e.target.value)}
-                    className="flex-1 px-2 py-1.5 border rounded text-sm bg-white"
-                  >
-                    <option value="">Never</option>
-                    <option value="1">1 hour</option>
-                    <option value="24">24 hours</option>
-                    <option value="168">7 days</option>
-                    <option value="720">30 days</option>
-                  </select>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <label className="text-xs text-gray-600 w-20">Max uses</label>
-                  <select
-                    value={inviteMaxUses}
-                    onChange={(e) => setInviteMaxUses(e.target.value)}
-                    className="flex-1 px-2 py-1.5 border rounded text-sm bg-white"
-                  >
-                    <option value="">Unlimited</option>
-                    <option value="1">1 use</option>
-                    <option value="5">5 uses</option>
-                    <option value="10">10 uses</option>
-                    <option value="25">25 uses</option>
-                    <option value="50">50 uses</option>
-                  </select>
-                </div>
-                <button
-                  onClick={handleCreateInvite}
-                  disabled={loading}
-                  className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center space-x-1"
-                >
-                  <Link2 className="w-4 h-4" />
-                  <span>{loading ? 'Creating...' : 'Generate Link'}</span>
-                </button>
-              </div>
-            </div>
+            <section aria-labelledby={`${uid}-create`} className="space-y-3 rounded border border-line bg-surface-hover p-4">
+              <h3 id={`${uid}-create`} className="text-sm font-medium text-ink">Create Invite Link</h3>
+              <ClassroomField
+                id={`${uid}-invite-permission`}
+                as="select"
+                label="Permission"
+                value={invitePermission}
+                onChange={(e) => setInvitePermission(e.target.value)}
+              >
+                <option value="view">View Only</option>
+                <option value="comment">Can Comment</option>
+                <option value="edit">Can Edit</option>
+              </ClassroomField>
+              <ClassroomField
+                id={`${uid}-invite-expiry`}
+                as="select"
+                label="Expires in"
+                value={inviteExpiry}
+                onChange={(e) => setInviteExpiry(e.target.value)}
+              >
+                <option value="">Never</option>
+                <option value="1">1 hour</option>
+                <option value="24">24 hours</option>
+                <option value="168">7 days</option>
+                <option value="720">30 days</option>
+              </ClassroomField>
+              <ClassroomField
+                id={`${uid}-invite-max`}
+                as="select"
+                label="Max uses"
+                value={inviteMaxUses}
+                onChange={(e) => setInviteMaxUses(e.target.value)}
+              >
+                <option value="">Unlimited</option>
+                <option value="1">1 use</option>
+                <option value="5">5 uses</option>
+                <option value="10">10 uses</option>
+                <option value="25">25 uses</option>
+                <option value="50">50 uses</option>
+              </ClassroomField>
+              <ClassroomButton
+                variant="primary"
+                icon={Link2}
+                onClick={handleCreateInvite}
+                disabled={loading}
+                className="w-full"
+              >
+                {loading ? 'Creating...' : 'Generate Link'}
+              </ClassroomButton>
+            </section>
+
+            {/* Copy feedback: the live region is always mounted so the message is announced. */}
+            <p role="status" className="min-h-[20px] text-xs text-success">
+              {copiedLink && (
+                <span className="inline-flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+                  <span>Link copied</span>
+                </span>
+              )}
+            </p>
 
             {/* Existing Links */}
             {inviteLinks.length > 0 ? (
-              <div className="space-y-2">
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Active Links ({inviteLinks.length})</h4>
-                {inviteLinks.map(link => {
-                  const isExpired = link.is_valid === false || (link.expires_at && new Date(link.expires_at) < new Date()) || (link.max_uses && link.use_count >= link.max_uses);
-                  return (
-                  <div key={link.id} className={`bg-white border rounded-lg p-3 ${isExpired ? 'opacity-60' : ''}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-2">
-                        <Shield className="w-4 h-4 text-gray-400" />
-                        <span className="text-xs font-medium capitalize bg-gray-100 px-2 py-0.5 rounded">
-                          {{ edit: 'Editor', comment: 'Commenter', view: 'Viewer' }[link.permission] || 'Viewer'}
-                        </span>
-                        {isExpired && (
-                          <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded">
-                            {link.max_uses && link.use_count >= link.max_uses ? 'Limit Reached' : 'Expired'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <button
-                          onClick={() => copyInviteLink(link.token)}
-                          className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded"
-                          title="Copy link"
-                        >
-                          {copiedLink === link.token ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                        <button
-                          onClick={() => handleRevokeInvite(link.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
-                          title="Revoke"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-3 text-xs text-gray-500">
-                      {link.expires_at && (
-                        <span className="flex items-center space-x-1">
-                          <Clock className="w-3 h-3" />
-                          <span>Expires {new Date(link.expires_at).toLocaleDateString()}</span>
-                        </span>
-                      )}
-                      <span>{link.use_count}{link.max_uses ? `/${link.max_uses}` : ''} uses</span>
-                    </div>
-                  </div>
-                  );
-                })}
-              </div>
+              <section aria-labelledby={`${uid}-active`} className="space-y-2">
+                <h3 id={`${uid}-active`} className="text-sm font-medium text-ink">Active Links ({inviteLinks.length})</h3>
+                <ul className="space-y-2">
+                  {inviteLinks.map(link => {
+                    const limitReached = Boolean(link.max_uses && link.use_count >= link.max_uses);
+                    const isExpired = Boolean(link.is_valid === false || (link.expires_at && new Date(link.expires_at) < new Date()) || limitReached);
+                    const badge = permissionBadge(link.permission);
+                    return (
+                      <li key={link.id} className="rounded border border-line bg-surface p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <ChalkBadge icon={badge.icon} label={badge.label} />
+                            {isExpired && (
+                              <ChalkBadge
+                                tone="danger"
+                                icon={AlertTriangle}
+                                label={limitReached ? 'Limit Reached' : 'Expired'}
+                              />
+                            )}
+                          </div>
+                          <div className="flex flex-shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => copyInviteLink(link.token)}
+                              className={`${ICON_BTN} hover:bg-accent-tint hover:text-accent`}
+                              title="Copy link"
+                              aria-label="Copy link"
+                            >
+                              {copiedLink === link.token
+                                ? <Check className="h-4 w-4 text-success" strokeWidth={1.5} aria-hidden="true" />
+                                : <Copy className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRevokeInvite(link.id)}
+                              className={`${ICON_BTN} hover:bg-danger-tint hover:text-danger`}
+                              title="Revoke"
+                              aria-label="Revoke"
+                            >
+                              <X className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-ink-2">
+                          {link.expires_at && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+                              <span>Expires {new Date(link.expires_at).toLocaleDateString()}</span>
+                            </span>
+                          )}
+                          <span>{link.use_count}{link.max_uses ? `/${link.max_uses}` : ''} uses</span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
             ) : (
-              <p className="text-center text-sm text-gray-500 py-4">No active invite links</p>
+              <p className="py-4 text-center text-sm text-ink-2">No active invite links</p>
             )}
-          </div>
+          </>
         )}
-
-        {/* Footer */}
-        <div className="p-4 border-t bg-gray-50">
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
-          >
-            Done
-          </button>
-        </div>
       </div>
-    </div>
+    </ClassroomDialog>
   );
 }

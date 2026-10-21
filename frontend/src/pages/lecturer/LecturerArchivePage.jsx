@@ -2,18 +2,44 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Archive, RotateCcw, Trash2, Clock } from 'lucide-react';
 import { boardsApi } from '../../services/api';
 import { formatTimeAgo } from '../../hooks/useLecturerData';
+import {
+  ChalkboardHeader, ClassroomAlert, ClassroomButton, PaperPanel, StickyNote,
+} from '../../components/classroom';
 
-export default function LecturerArchivePage({ onNavigate }) {
+// Placeholder rows with no motion; announced once through a status region.
+function ListSkeleton() {
+  return (
+    <PaperPanel tone="white" padded={false} className="overflow-hidden" aria-busy="true">
+      <p role="status" className="sr-only">Loading archived boards</p>
+      <div aria-hidden="true">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex items-center gap-3 border-t border-line p-4 first:border-t-0">
+            <span className="h-10 w-10 flex-none rounded bg-line" />
+            <span className="flex-1 space-y-2">
+              <span className="block h-3 w-1/3 rounded-sm bg-line" />
+              <span className="block h-3 w-2/3 rounded-sm bg-line" />
+            </span>
+          </div>
+        ))}
+      </div>
+    </PaperPanel>
+  );
+}
+
+export default function LecturerArchivePage() {
   const [boards, setBoards] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadFailed(false);
     try {
       const res = await boardsApi.getAll({ is_archived: 'true' });
       setBoards(res.data.results || res.data);
     } catch (err) {
       console.error('Failed to load archived boards:', err);
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -24,7 +50,7 @@ export default function LecturerArchivePage({ onNavigate }) {
   const handleRestore = async (id) => {
     try {
       await boardsApi.restore(id);
-      setBoards(boards.filter(b => b.id !== id));
+      setBoards((prev) => prev.filter(b => b.id !== id));
     } catch (err) {
       console.error('Failed to restore board:', err);
     }
@@ -34,55 +60,70 @@ export default function LecturerArchivePage({ onNavigate }) {
     if (!window.confirm('Permanently delete this board?')) return;
     try {
       await boardsApi.delete(id);
-      setBoards(boards.filter(b => b.id !== id));
+      setBoards((prev) => prev.filter(b => b.id !== id));
     } catch (err) {
       console.error('Failed to delete board:', err);
     }
   };
 
-  return (
-    <>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Archived Boards</h1>
-        <p className="text-gray-600 mt-1">Boards you have archived. Restore or permanently delete them.</p>
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600" />
-        </div>
-      ) : boards.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Archive className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p className="text-lg font-medium">No archived boards</p>
-          <p className="text-sm">Boards you archive will appear here</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {boards.map(board => (
-            <div key={board.id} className="bg-white rounded-xl shadow-sm border p-5">
-              <h3 className="font-semibold text-gray-900 truncate mb-2">{board.name}</h3>
-              <p className="text-xs text-gray-400 flex items-center mb-4">
-                <Clock className="w-3.5 h-3.5 mr-1" />{formatTimeAgo(board.updated_at)}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleRestore(board.id)}
-                  className="flex-1 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-sm font-medium hover:bg-indigo-100 transition flex items-center justify-center space-x-1"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" /><span>Restore</span>
-                </button>
-                <button
-                  onClick={() => handleDelete(board.id)}
-                  className="flex-1 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100 transition flex items-center justify-center space-x-1"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /><span>Delete</span>
-                </button>
+  let body;
+  if (loading) {
+    body = <ListSkeleton />;
+  } else if (loadFailed) {
+    body = (
+      <PaperPanel tone="white" padded={false} className="space-y-3 p-4">
+        <ClassroomAlert>Could not load your archived boards. Check your connection and try again.</ClassroomAlert>
+        <ClassroomButton onClick={load}>Try again</ClassroomButton>
+      </PaperPanel>
+    );
+  } else if (boards.length === 0) {
+    body = (
+      <StickyNote as="div" color="azure" className="mx-auto max-w-sm items-center text-center">
+        <Archive className="mb-2 h-5 w-5 text-ink-2" strokeWidth={1.5} aria-hidden="true" />
+        <h2 className="text-base font-semibold text-ink">No archived boards</h2>
+        <p className="mt-1 text-sm text-ink">Boards you archive will appear here</p>
+      </StickyNote>
+    );
+  } else {
+    body = (
+      <PaperPanel tone="white" padded={false} className="overflow-hidden">
+        <ul aria-label="Archived boards">
+          {boards.map((board) => (
+            <li
+              key={board.id}
+              className="flex flex-col gap-3 border-t border-line p-4 first:border-t-0 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-sm font-semibold text-ink">{board.name}</h2>
+                <time dateTime={board.updated_at} className="mt-1 flex items-center gap-1 text-xs text-ink-2">
+                  <Clock className="h-3.5 w-3.5 flex-none" strokeWidth={1.5} aria-hidden="true" />
+                  <span>{formatTimeAgo(board.updated_at)}</span>
+                </time>
               </div>
-            </div>
+              <div className="flex flex-none gap-2">
+                <ClassroomButton icon={RotateCcw} onClick={() => handleRestore(board.id)}>
+                  Restore
+                </ClassroomButton>
+                <ClassroomButton icon={Trash2} onClick={() => handleDelete(board.id)}>
+                  Delete
+                </ClassroomButton>
+              </div>
+            </li>
           ))}
-        </div>
-      )}
-    </>
+        </ul>
+      </PaperPanel>
+    );
+  }
+
+  return (
+    <section aria-labelledby="archive-title" className="space-y-4">
+      <ChalkboardHeader
+        size="compact"
+        titleId="archive-title"
+        title="Archived Boards"
+        subtitle="Boards you have archived. Restore or permanently delete them."
+      />
+      {body}
+    </section>
   );
 }

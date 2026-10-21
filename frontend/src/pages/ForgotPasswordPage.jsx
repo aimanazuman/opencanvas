@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Palette, Mail, Lock, Eye, EyeOff, ArrowLeft, KeyRound, CheckCircle } from 'lucide-react';
+import { Mail, KeyRound, Info, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
 import { authApi } from '../services/api';
+import AuthFrame from '../components/auth/AuthFrame';
+import { IconField, PasswordField, Notice } from '../components/auth/AuthFields';
+import { ClassroomButton, ChalkBadge } from '../components/classroom';
 
 function ForgotPasswordPage({ onNavigate }) {
   const [searchParams] = useSearchParams();
@@ -79,185 +82,134 @@ function ForgotPasswordPage({ onNavigate }) {
     }
   };
 
+  const resetDone = success.includes('reset successfully');
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center space-x-2 cursor-pointer" onClick={() => onNavigate('home')}>
-            <Palette className="h-10 w-10 text-indigo-600" />
-            <span className="text-3xl font-bold text-gray-900">OpenCanvas</span>
+    <AuthFrame
+      titleId="forgot-title"
+      title={step === 1 ? 'Reset your password' : 'Enter your new password'}
+      subtitle={step === 1 ? "We'll send a reset link to your email." : 'Use the details from your reset link.'}
+      onHome={() => onNavigate('home')}
+    >
+      {/* Error message */}
+      {error && <Notice tone="error" icon={AlertCircle}>{error}</Notice>}
+
+      {/* Success message */}
+      {success && <Notice tone="success" icon={CheckCircle}>{success}</Notice>}
+
+      {/* Step 1: Enter Email */}
+      {step === 1 && (
+        <form onSubmit={handleRequestReset} className="space-y-4">
+          <IconField
+            id="forgot-email"
+            label="Email Address"
+            icon={Mail}
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="john@example.com"
+            hint="Enter the email address associated with your account."
+            required
+          />
+
+          <ClassroomButton type="submit" variant="primary" disabled={loading} className="w-full">
+            {loading ? 'Sending...' : 'Send Reset Link'}
+          </ClassroomButton>
+        </form>
+      )}
+
+      {/* Step 2: Enter UID + Token + New Password */}
+      {step === 2 && !resetDone && (
+        <form onSubmit={handleConfirmReset} className="space-y-4">
+          <IconField
+            id="forgot-uid"
+            label="User ID (UID)"
+            icon={KeyRound}
+            type="text"
+            autoComplete="off"
+            value={uid}
+            onChange={(e) => setUid(e.target.value)}
+            placeholder="UID from reset link"
+            required
+          />
+
+          <IconField
+            id="forgot-token"
+            label="Reset Token"
+            icon={KeyRound}
+            type="text"
+            autoComplete="off"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="Token from reset link"
+            required
+          />
+
+          <div>
+            <PasswordField
+              id="forgot-new-password"
+              label="New Password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Enter new password"
+              required
+              minLength={8}
+              visible={showPassword}
+              onToggle={() => setShowPassword(!showPassword)}
+            />
+            <div className="mt-2">
+              <ChalkBadge label="At least 8 characters" icon={Info} />
+            </div>
           </div>
-          <p className="text-gray-600 mt-2">
-            {step === 1 ? 'Reset your password' : 'Enter your new password'}
-          </p>
-        </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
+          <PasswordField
+            id="forgot-confirm-password"
+            label="Confirm Password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Confirm new password"
+            required
+            minLength={8}
+            visible={showConfirmPassword}
+            onToggle={() => setShowConfirmPassword(!showConfirmPassword)}
+          />
 
-        {/* Success Message */}
-        {success && (
-          <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm flex items-start space-x-2">
-            <CheckCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-            <span>{success}</span>
-          </div>
-        )}
+          <ClassroomButton type="submit" variant="primary" disabled={loading} className="w-full">
+            {loading ? 'Resetting...' : 'Reset Password'}
+          </ClassroomButton>
 
-        {/* Step 1: Enter Email */}
-        {step === 1 && (
-          <form onSubmit={handleRequestReset} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="john@example.com"
-                  required
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Enter the email address associated with your account.
-              </p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Sending...' : 'Send Reset Link'}
-            </button>
-          </form>
-        )}
-
-        {/* Step 2: Enter UID + Token + New Password */}
-        {step === 2 && !success.includes('reset successfully') && (
-          <form onSubmit={handleConfirmReset} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">User ID (UID)</label>
-              <div className="relative">
-                <KeyRound className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={uid}
-                  onChange={(e) => setUid(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="UID from reset link"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reset Token</label>
-              <div className="relative">
-                <KeyRound className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Token from reset link"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Enter new password"
-                  required
-                  minLength={8}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Confirm new password"
-                  required
-                  minLength={8}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Resetting...' : 'Reset Password'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { setStep(1); setError(''); setSuccess(''); }}
-              className="w-full text-sm text-gray-500 hover:text-indigo-600"
-            >
-              Didn't receive a token? Try again
-            </button>
-          </form>
-        )}
-
-        {/* Success state with login redirect */}
-        {success.includes('reset successfully') && (
           <button
-            onClick={() => onNavigate('login')}
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition shadow-md"
+            type="button"
+            onClick={() => { setStep(1); setError(''); setSuccess(''); }}
+            className="inline-flex min-h-[44px] w-full items-center justify-center text-sm text-ink-2 underline underline-offset-2 hover:text-accent-700"
           >
-            Go to Sign In
+            Didn't receive a token? Try again
           </button>
-        )}
+        </form>
+      )}
 
-        {/* Back to login link */}
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => onNavigate('login')}
-            className="text-sm text-gray-600 hover:text-indigo-600 inline-flex items-center space-x-1"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to Sign In</span>
-          </button>
-        </div>
+      {/* Success state with login redirect */}
+      {resetDone && (
+        <ClassroomButton variant="primary" onClick={() => onNavigate('login')} className="w-full">
+          Go to Sign In
+        </ClassroomButton>
+      )}
+
+      {/* Back to login link */}
+      <div className="mt-5 text-center">
+        <button
+          type="button"
+          onClick={() => onNavigate('login')}
+          className="inline-flex min-h-[44px] items-center gap-1 px-2 text-sm text-ink-2 hover:text-accent-700"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+          <span>Back to Sign In</span>
+        </button>
       </div>
-    </div>
+    </AuthFrame>
   );
 }
 

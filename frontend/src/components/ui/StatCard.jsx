@@ -1,33 +1,38 @@
 import React from 'react';
 
 const COLOR_CLASSES = {
-  indigo: 'bg-indigo-100 text-indigo-600',
-  green: 'bg-green-100 text-green-600',
-  purple: 'bg-purple-100 text-purple-600',
-  yellow: 'bg-yellow-100 text-yellow-600',
-  red: 'bg-red-100 text-red-600',
-  blue: 'bg-blue-100 text-blue-600',
-  teal: 'bg-teal-100 text-teal-600',
-  pink: 'bg-pink-100 text-pink-600',
+  azure: 'bg-accent-50 text-accent-700',
+  blue: 'bg-accent-50 text-accent-700',
+  green: 'bg-green-50 text-green-700',
+  teal: 'bg-teal-50 text-teal-700',
+  yellow: 'bg-amber-50 text-amber-700',
+  orange: 'bg-orange-50 text-orange-700',
+  red: 'bg-red-50 text-red-700',
 };
 
-export default function StatCard({ label, value, icon: Icon, color = 'indigo', subtitle, onClick }) {
-  const colorClass = COLOR_CLASSES[color] || COLOR_CLASSES.indigo;
+export default function StatCard({ label, value, icon: Icon, color = 'azure', subtitle, onClick }) {
+  const colorClass = COLOR_CLASSES[color] || COLOR_CLASSES.azure;
+  const interactive = onClick
+    ? 'lift cursor-pointer hover:border-gray-300 focus-visible:outline-accent'
+    : '';
 
   return (
     <div
-      className={`bg-white rounded-xl shadow-sm border p-6 ${onClick ? 'cursor-pointer hover:shadow-md transition' : ''}`}
+      className={`bg-surface rounded border border-line p-3 ${interactive}`}
       onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e); } } : undefined}
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-600">{label}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-          {subtitle && <p className="text-xs text-green-600 mt-1">{subtitle}</p>}
+          <p className="text-xs text-ink-2">{label}</p>
+          <p className="text-xl font-semibold text-ink mt-1">{value}</p>
+          {subtitle && <p className="text-xs text-success mt-1">{subtitle}</p>}
         </div>
         {Icon && (
-          <div className={`p-3 rounded-lg ${colorClass}`}>
-            <Icon className="w-6 h-6" />
+          <div className={`p-2 rounded ${colorClass}`}>
+            <Icon className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
           </div>
         )}
       </div>

@@ -5,8 +5,8 @@
 const FILE_TYPE_MAP = {
   // Documents
   pdf: { label: 'PDF', color: 'text-red-600', bg: 'bg-red-100', category: 'document' },
-  doc: { label: 'DOC', color: 'text-blue-700', bg: 'bg-blue-100', category: 'document' },
-  docx: { label: 'DOCX', color: 'text-blue-700', bg: 'bg-blue-100', category: 'document' },
+  doc: { label: 'DOC', color: 'text-accent-700', bg: 'bg-accent-100', category: 'document' },
+  docx: { label: 'DOCX', color: 'text-accent-700', bg: 'bg-accent-100', category: 'document' },
   // Presentations
   ppt: { label: 'PPT', color: 'text-orange-600', bg: 'bg-orange-100', category: 'document' },
   pptx: { label: 'PPTX', color: 'text-orange-600', bg: 'bg-orange-100', category: 'document' },
@@ -15,24 +15,24 @@ const FILE_TYPE_MAP = {
   xlsx: { label: 'XLSX', color: 'text-green-700', bg: 'bg-green-100', category: 'document' },
   csv: { label: 'CSV', color: 'text-green-700', bg: 'bg-green-100', category: 'data' },
   // Images
-  png: { label: 'PNG', color: 'text-purple-600', bg: 'bg-purple-100', category: 'image' },
-  jpg: { label: 'JPG', color: 'text-purple-600', bg: 'bg-purple-100', category: 'image' },
-  jpeg: { label: 'JPEG', color: 'text-purple-600', bg: 'bg-purple-100', category: 'image' },
-  gif: { label: 'GIF', color: 'text-purple-600', bg: 'bg-purple-100', category: 'image' },
-  svg: { label: 'SVG', color: 'text-purple-600', bg: 'bg-purple-100', category: 'image' },
+  png: { label: 'PNG', color: 'text-teal-600', bg: 'bg-teal-100', category: 'image' },
+  jpg: { label: 'JPG', color: 'text-teal-600', bg: 'bg-teal-100', category: 'image' },
+  jpeg: { label: 'JPEG', color: 'text-teal-600', bg: 'bg-teal-100', category: 'image' },
+  gif: { label: 'GIF', color: 'text-teal-600', bg: 'bg-teal-100', category: 'image' },
+  svg: { label: 'SVG', color: 'text-teal-600', bg: 'bg-teal-100', category: 'image' },
   // Audio
-  mp3: { label: 'MP3', color: 'text-pink-600', bg: 'bg-pink-100', category: 'audio' },
-  wav: { label: 'WAV', color: 'text-pink-600', bg: 'bg-pink-100', category: 'audio' },
-  ogg: { label: 'OGG', color: 'text-pink-600', bg: 'bg-pink-100', category: 'audio' },
+  mp3: { label: 'MP3', color: 'text-orange-600', bg: 'bg-orange-100', category: 'audio' },
+  wav: { label: 'WAV', color: 'text-orange-600', bg: 'bg-orange-100', category: 'audio' },
+  ogg: { label: 'OGG', color: 'text-orange-600', bg: 'bg-orange-100', category: 'audio' },
   // Video
-  mp4: { label: 'MP4', color: 'text-indigo-600', bg: 'bg-indigo-100', category: 'video' },
-  webm: { label: 'WEBM', color: 'text-indigo-600', bg: 'bg-indigo-100', category: 'video' },
+  mp4: { label: 'MP4', color: 'text-accent-600', bg: 'bg-accent-100', category: 'video' },
+  webm: { label: 'WEBM', color: 'text-accent-600', bg: 'bg-accent-100', category: 'video' },
   // Code
   js: { label: 'JS', color: 'text-yellow-600', bg: 'bg-yellow-100', category: 'code' },
-  py: { label: 'PY', color: 'text-blue-600', bg: 'bg-blue-100', category: 'code' },
+  py: { label: 'PY', color: 'text-accent-600', bg: 'bg-accent-100', category: 'code' },
   java: { label: 'JAVA', color: 'text-red-500', bg: 'bg-red-100', category: 'code' },
   html: { label: 'HTML', color: 'text-orange-500', bg: 'bg-orange-100', category: 'code' },
-  css: { label: 'CSS', color: 'text-blue-500', bg: 'bg-blue-100', category: 'code' },
+  css: { label: 'CSS', color: 'text-accent-500', bg: 'bg-accent-100', category: 'code' },
   // Archives
   zip: { label: 'ZIP', color: 'text-gray-600', bg: 'bg-gray-200', category: 'archive' },
   rar: { label: 'RAR', color: 'text-gray-600', bg: 'bg-gray-200', category: 'archive' },

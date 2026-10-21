@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useId } from 'react';
 import { MessageCircle, Send } from 'lucide-react';
+import { ClassroomField, ClassroomButton } from '../classroom';
 
 export default function CommentThread({ comments = [], onAddComment, canComment = true }) {
   const [text, setText] = useState('');
   const [expanded, setExpanded] = useState(false);
+  const uid = useId();
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -27,48 +29,54 @@ export default function CommentThread({ comments = [], onAddComment, canComment 
   };
 
   return (
-    <div className="mt-3 pt-3 border-t border-gray-200">
+    <div className="mt-3 border-t border-line pt-3">
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center space-x-1 text-sm text-gray-500 hover:text-gray-700"
+        aria-expanded={expanded}
+        aria-controls={`${uid}-thread`}
+        className="btn-motion flex min-h-[44px] items-center gap-1.5 text-sm text-ink-2 hover:text-ink md:min-h-[32px]"
       >
-        <MessageCircle className="w-4 h-4" />
+        <MessageCircle className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
         <span>{comments.length} comment{comments.length !== 1 ? 's' : ''}</span>
       </button>
 
       {expanded && (
-        <div className="mt-3 space-y-3">
-          {comments.map((comment) => (
-            <div key={comment.id} className="flex space-x-2">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
-                {comment.user.avatar}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm font-medium text-gray-900">{comment.user.name}</span>
-                  <span className="text-xs text-gray-400">{formatTime(comment.createdAt)}</span>
+        <div id={`${uid}-thread`} className="mt-3 space-y-3">
+          <ul className="space-y-3">
+            {comments.map((comment) => (
+              <li key={comment.id} className="flex gap-2">
+                <span
+                  aria-hidden="true"
+                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent text-xs font-medium text-white"
+                >
+                  {comment.user.avatar}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-ink">{comment.user.name}</span>
+                    <span className="text-xs text-ink-3">{formatTime(comment.createdAt)}</span>
+                  </div>
+                  <p className="mt-0.5 break-words text-sm text-ink">{comment.text}</p>
                 </div>
-                <p className="text-sm text-gray-700 mt-0.5">{comment.text}</p>
-              </div>
-            </div>
-          ))}
+              </li>
+            ))}
+          </ul>
 
           {canComment && (
-            <form onSubmit={handleSubmit} className="flex space-x-2">
-              <input
+            <form onSubmit={handleSubmit} className="flex items-end gap-2">
+              <ClassroomField
+                id={`${uid}-input`}
+                label="Add a comment"
+                className="min-w-0 flex-1"
                 type="text"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="Add a comment..."
-                className="flex-1 px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              <button
-                type="submit"
-                disabled={!text.trim()}
-                className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-              >
-                <Send className="w-3.5 h-3.5" />
-              </button>
+              <ClassroomButton type="submit" variant="primary" icon={Send} disabled={!text.trim()}>
+                Send
+              </ClassroomButton>
             </form>
           )}
         </div>

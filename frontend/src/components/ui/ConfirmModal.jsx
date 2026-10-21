@@ -1,43 +1,47 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
+import Button from './Button';
 
 export default function ConfirmModal({ isOpen, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm, onCancel, variant = 'danger' }) {
+  const cancelRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const previous = document.activeElement;
+    cancelRef.current?.focus();
+    const onKey = (e) => { if (e.key === 'Escape') onCancel?.(); };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      if (previous && previous.focus) previous.focus();
+    };
+  }, [isOpen, onCancel]);
+
   if (!isOpen) return null;
 
-  const confirmColors = variant === 'danger'
-    ? 'bg-red-600 hover:bg-red-700 text-white'
-    : 'bg-indigo-600 hover:bg-indigo-700 text-white';
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-backdropFade">
-      <div className="bg-white rounded-xl w-full max-w-md animate-scaleIn">
-        <div className="p-6 border-b">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              {variant === 'danger' && <AlertTriangle className="w-5 h-5 text-red-500" />}
-              <h3 className="text-xl font-bold text-gray-900">{title}</h3>
-            </div>
-            <button onClick={onCancel} className="p-1 hover:bg-gray-100 rounded">
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
+    <div className="fixed inset-0 bg-[var(--scrim)] flex items-end md:items-center justify-center z-50 md:p-4 animate-backdropFade">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-modal-title"
+        className="bg-surface rounded-t-xl md:rounded-xl shadow-modal w-full max-w-md animate-scaleIn"
+      >
+        <div className="flex items-center justify-between h-11 px-4 border-b border-line">
+          <div className="flex items-center gap-2">
+            {variant === 'danger' && <AlertTriangle className="w-4 h-4 text-danger" strokeWidth={1.5} aria-hidden="true" />}
+            <h3 id="confirm-modal-title" className="text-base font-semibold text-ink">{title}</h3>
           </div>
-        </div>
-        <div className="p-6">
-          <p className="text-gray-600">{message}</p>
-        </div>
-        <div className="p-6 border-t flex space-x-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
-          >
-            {cancelLabel}
+          <button onClick={onCancel} aria-label="Close" className="w-7 h-7 flex items-center justify-center rounded hover:bg-surface-hover text-ink-2">
+            <X className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
           </button>
-          <button
-            onClick={onConfirm}
-            className={`flex-1 px-4 py-2 rounded-lg transition font-medium ${confirmColors}`}
-          >
-            {confirmLabel}
-          </button>
+        </div>
+        <div className="p-4">
+          <p className="text-sm text-ink-2">{message}</p>
+        </div>
+        <div className="px-4 py-3 border-t border-line flex justify-end gap-2">
+          <Button ref={cancelRef} variant="secondary" onClick={onCancel}>{cancelLabel}</Button>
+          <Button variant={variant === 'danger' ? 'danger' : 'primary'} onClick={onConfirm}>{confirmLabel}</Button>
         </div>
       </div>
     </div>

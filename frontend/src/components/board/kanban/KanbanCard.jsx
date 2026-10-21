@@ -8,66 +8,71 @@ function isImageFile(file) {
   return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext);
 }
 
+// The whole card is one button, so it is keyboard reachable and announced as a control.
+// Hover lift only where a pointer can hover (see .lift in index.css); reduced motion removes it.
+const CARD = 'lift block w-full min-w-0 rounded-lg border border-line bg-surface p-3 text-left';
+
 export default function KanbanCard({ card, user, onClick }) {
   const likes = card.likes || [];
   const isLiked = user && likes.some(l => l.userId === user.id);
   const firstImage = (card.files || []).find(f => isImageFile(f) && f.dataUrl);
+  const fileCount = card.files ? card.files.length : 0;
 
   return (
-    <div
-      className="bg-white rounded-lg border shadow-sm p-3 cursor-pointer hover:shadow-md transition group"
-      onClick={onClick}
-    >
+    <button type="button" className={CARD} onClick={onClick}>
       {firstImage && (
-        <div className="mb-2 rounded overflow-hidden -mx-1 -mt-1">
-          <MediaImg src={firstImage.dataUrl} alt="" className="w-full h-28 object-cover" />
-        </div>
+        <span className="-mx-1 -mt-1 mb-2 block overflow-hidden rounded">
+          <MediaImg src={firstImage.dataUrl} alt="" loading="lazy" className="h-28 w-full object-cover" />
+        </span>
       )}
       {!firstImage && card.imageUrl && (
-        <div className="mb-2 rounded overflow-hidden -mx-1 -mt-1">
-          <MediaImg src={card.imageUrl} alt="" className="w-full h-28 object-cover" />
-        </div>
+        <span className="-mx-1 -mt-1 mb-2 block overflow-hidden rounded">
+          <MediaImg src={card.imageUrl} alt="" loading="lazy" className="h-28 w-full object-cover" />
+        </span>
       )}
-      <p className="text-sm font-medium text-gray-900">{card.title || card.content}</p>
+      <span className="block text-sm font-medium text-ink">{card.title || card.content}</span>
       {card.content && card.title && (
-        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{card.content}</p>
+        <span className="mt-1 line-clamp-2 block text-xs text-ink-2">{card.content}</span>
       )}
-      {card.files && card.files.length > 0 && (
-        <div className="flex items-center space-x-1 mt-2">
-          <Paperclip className="w-3 h-3 text-gray-400" />
-          <span className="text-xs text-gray-400">{card.files.length} file{card.files.length !== 1 ? 's' : ''}</span>
-        </div>
+      {fileCount > 0 && (
+        <span className="mt-2 flex items-center gap-1 text-xs text-ink-2">
+          <Paperclip className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+          <span>{fileCount} file{fileCount !== 1 ? 's' : ''}</span>
+        </span>
       )}
       {card.linkUrl && (
-        <div className="flex items-center space-x-1 mt-1">
-          <Link2 className="w-3 h-3 text-blue-400" />
-          <span className="text-xs text-blue-500 truncate">{card.linkUrl}</span>
-        </div>
+        <span className="mt-1 flex items-center gap-1 text-xs text-accent">
+          <Link2 className="h-3 w-3 flex-shrink-0" strokeWidth={1.5} aria-hidden="true" />
+          <span className="truncate">{card.linkUrl}</span>
+        </span>
       )}
-      <div className="flex items-center justify-between mt-2">
-        {card.author && (
-          <div className="flex items-center space-x-1">
-            <div className="w-6 h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs" title={card.author.name}>
+      <span className="mt-2 flex items-center justify-between gap-2">
+        {card.author ? (
+          <span className="flex min-w-0 items-center gap-1">
+            <span
+              aria-hidden="true"
+              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-accent text-xs text-white"
+            >
               {card.author.avatar}
-            </div>
-            <span className="text-xs text-gray-400">{card.author.name}</span>
-          </div>
-        )}
-        <div className="flex items-center space-x-2">
+            </span>
+            <span className="truncate text-xs text-ink-2">{card.author.name}</span>
+          </span>
+        ) : <span />}
+        <span className="flex flex-shrink-0 items-center gap-2">
           {likes.length > 0 && (
-            <span className="flex items-center text-xs text-pink-500 space-x-0.5">
-              <Heart className={`w-3 h-3 ${isLiked ? 'fill-pink-500' : ''}`} />
+            <span className="flex items-center gap-0.5 text-xs text-orange-700">
+              <Heart className={`h-3 w-3 ${isLiked ? 'fill-current' : ''}`} strokeWidth={1.5} aria-hidden="true" />
               <span>{likes.length}</span>
             </span>
           )}
           {card.comments && card.comments.length > 0 && (
-            <span className="flex items-center text-xs text-gray-400 space-x-1">
-              <MessageCircle className="w-3 h-3" />
+            <span className="flex items-center gap-1 text-xs text-ink-2">
+              <MessageCircle className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
               <span>{card.comments.length}</span>
             </span>
           )}
-        </div>
-      </div>
-    </div>
+        </span>
+      </span>
+    </button>
   );
 }

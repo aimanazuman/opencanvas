@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
-import { Video, Trash2, ExternalLink, Calendar } from 'lucide-react';
+import { Video, Trash2, ExternalLink, Calendar, AlertTriangle } from 'lucide-react';
 import { safeUrl, safeUrlWithDefaultScheme } from '../../../utils/safeUrl';
+import { ChalkBadge, ClassroomButton } from '../../classroom';
+
+const PLACEHOLDER = 'rounded-lg border-2 border-dashed border-line-strong bg-surface p-6 text-center';
+// 44 px on phones, 32 px on desktop.
+const ICON_BTN = 'btn-motion flex h-11 w-11 flex-none items-center justify-center rounded text-ink-2 hover:bg-surface-hover hover:text-danger md:h-8 md:w-8';
 
 export default function GoogleMeetBlock({ block, canEdit, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
@@ -23,42 +28,42 @@ export default function GoogleMeetBlock({ block, canEdit, onUpdate, onDelete }) 
 
   if (editing && canEdit) {
     return (
-      <div className="border border-green-300 rounded-lg p-4 bg-green-50">
+      <div className="rounded-lg border border-line bg-surface p-4">
         <div className="space-y-3">
           <input
             type="text"
+            aria-label="Meeting title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Meeting title (e.g., Lecture Q&A Session)"
-            className="w-full px-3 py-2 border rounded text-sm"
+            className="w-full rounded border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             autoFocus
           />
           <input
             type="text"
+            aria-label="Meeting link"
             value={meetUrl}
             onChange={(e) => setMeetUrl(e.target.value)}
             placeholder="https://meet.google.com/abc-defg-hij"
-            className="w-full px-3 py-2 border rounded text-sm"
+            className="w-full rounded border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           />
           <input
             type="datetime-local"
+            aria-label="Scheduled date and time"
             value={scheduledAt}
             onChange={(e) => setScheduledAt(e.target.value)}
-            className="w-full px-3 py-2 border rounded text-sm"
+            className="w-full rounded border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           />
           <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
-            >
+            <ClassroomButton variant="primary" onClick={handleSave}>
               Save
-            </button>
-            <button
+            </ClassroomButton>
+            <ClassroomButton
+              variant="ghost"
               onClick={() => { setMeetUrl(block.meetUrl || ''); setTitle(block.title || ''); setScheduledAt(block.scheduledAt || ''); setEditing(false); }}
-              className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300"
             >
               Cancel
-            </button>
+            </ClassroomButton>
           </div>
         </div>
       </div>
@@ -67,22 +72,19 @@ export default function GoogleMeetBlock({ block, canEdit, onUpdate, onDelete }) 
 
   if (!block.meetUrl) {
     return (
-      <div className="border-2 border-dashed border-green-300 rounded-lg p-6 text-center bg-green-50">
+      <div className={PLACEHOLDER}>
         {canEdit ? (
           <>
-            <Video className="mx-auto mb-2 text-green-500" size={32} />
-            <p className="text-sm text-green-600 mb-2">Add a Google Meet link</p>
-            <button
-              onClick={() => setEditing(true)}
-              className="px-3 py-1.5 bg-green-500 text-white rounded text-sm hover:bg-green-600"
-            >
+            <Video className="mx-auto mb-2 text-green-700" size={32} strokeWidth={1.5} aria-hidden="true" />
+            <p className="text-sm text-ink-2 mb-2">Add a Google Meet link</p>
+            <ClassroomButton variant="primary" icon={Video} onClick={() => setEditing(true)}>
               Set Up Meeting
-            </button>
+            </ClassroomButton>
           </>
         ) : (
           <>
-            <Video className="mx-auto mb-2 text-green-400" size={32} />
-            <p className="text-sm text-gray-500">No meeting set up</p>
+            <Video className="mx-auto mb-2 text-ink-3" size={32} strokeWidth={1.5} aria-hidden="true" />
+            <p className="text-sm text-ink-2">No meeting set up</p>
           </>
         )}
       </div>
@@ -90,36 +92,32 @@ export default function GoogleMeetBlock({ block, canEdit, onUpdate, onDelete }) 
   }
 
   return (
-    <div className="border border-green-300 rounded-lg bg-green-50 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
-            <Video size={16} className="text-white" />
+    <div className="rounded-lg border border-line bg-surface overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-green-700">
+            <Video size={16} strokeWidth={1.5} className="text-white" aria-hidden="true" />
           </div>
-          <div>
-            <h4 className="text-sm font-semibold text-green-800">
+          <div className="min-w-0">
+            <h4 className="text-sm font-semibold text-ink">
               {block.title || 'Google Meet'}
             </h4>
             {block.scheduledAt && (
-              <p className="text-xs text-green-600 flex items-center gap-1">
-                <Calendar size={10} />
-                {new Date(block.scheduledAt).toLocaleString()}
-              </p>
+              <div className="mt-1">
+                <ChalkBadge icon={Calendar} label={new Date(block.scheduledAt).toLocaleString()} />
+              </div>
             )}
           </div>
         </div>
         <div className="flex items-center gap-1">
           {canEdit && (
-            <button
-              onClick={() => setEditing(true)}
-              className="text-gray-400 hover:text-gray-600 text-xs px-2 py-1"
-            >
+            <ClassroomButton variant="ghost" onClick={() => setEditing(true)}>
               Edit
-            </button>
+            </ClassroomButton>
           )}
           {canEdit && (
-            <button onClick={onDelete} className="p-1.5 text-gray-400 hover:text-red-500 rounded" title="Remove">
-              <Trash2 size={16} />
+            <button type="button" onClick={onDelete} className={ICON_BTN} title="Remove" aria-label="Remove">
+              <Trash2 size={16} strokeWidth={1.5} aria-hidden="true" />
             </button>
           )}
         </div>
@@ -130,14 +128,17 @@ export default function GoogleMeetBlock({ block, canEdit, onUpdate, onDelete }) 
             href={meetHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+            className="btn-motion inline-flex min-h-[44px] items-center gap-2 rounded bg-green-700 px-4 text-sm font-medium text-white hover:bg-green-800 md:min-h-[32px]"
           >
-            <Video size={16} />
+            <Video size={16} strokeWidth={1.5} aria-hidden="true" />
             Join Meeting
-            <ExternalLink size={14} />
+            <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
           </a>
         ) : (
-          <span className="text-sm text-red-600">This meeting link was blocked because it is not a normal web address.</span>
+          <span className="flex items-center gap-2 text-sm text-ink">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 text-danger" strokeWidth={1.5} aria-hidden="true" />
+            This meeting link was blocked because it is not a normal web address.
+          </span>
         )}
       </div>
     </div>

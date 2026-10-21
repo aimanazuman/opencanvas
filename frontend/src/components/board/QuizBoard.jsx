@@ -68,10 +68,10 @@ function QuizBuilder({ questions, settings, onUpdateQuestions, onUpdateSettings 
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
       {/* Settings toggle */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900">Quiz Builder</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Quiz Builder</h2>
         <button
           onClick={() => setShowSettings(!showSettings)}
-          className="flex items-center space-x-1.5 text-sm text-gray-600 hover:text-indigo-600 transition"
+          className="flex items-center space-x-1.5 text-sm text-gray-600 hover:text-accent-600 transition"
         >
           <Settings className="w-4 h-4" />
           <span>Settings</span>
@@ -88,7 +88,7 @@ function QuizBuilder({ questions, settings, onUpdateQuestions, onUpdateSettings 
               <button
                 type="button"
                 onClick={() => onUpdateSettings({ ...settings, shuffleQuestions: !settings.shuffleQuestions })}
-                className={`p-0.5 rounded-full transition ${settings.shuffleQuestions ? 'text-indigo-600' : 'text-gray-400'}`}
+                className={`p-0.5 rounded-full transition ${settings.shuffleQuestions ? 'text-accent-600' : 'text-gray-400'}`}
               >
                 {settings.shuffleQuestions ? <ToggleRight className="w-7 h-7" /> : <ToggleLeft className="w-7 h-7" />}
               </button>
@@ -98,7 +98,7 @@ function QuizBuilder({ questions, settings, onUpdateQuestions, onUpdateSettings 
               <button
                 type="button"
                 onClick={() => onUpdateSettings({ ...settings, showResults: !settings.showResults })}
-                className={`p-0.5 rounded-full transition ${settings.showResults ? 'text-indigo-600' : 'text-gray-400'}`}
+                className={`p-0.5 rounded-full transition ${settings.showResults ? 'text-accent-600' : 'text-gray-400'}`}
               >
                 {settings.showResults ? <ToggleRight className="w-7 h-7" /> : <ToggleLeft className="w-7 h-7" />}
               </button>
@@ -108,7 +108,7 @@ function QuizBuilder({ questions, settings, onUpdateQuestions, onUpdateSettings 
               <button
                 type="button"
                 onClick={() => onUpdateSettings({ ...settings, allowRetake: !settings.allowRetake })}
-                className={`p-0.5 rounded-full transition ${settings.allowRetake ? 'text-indigo-600' : 'text-gray-400'}`}
+                className={`p-0.5 rounded-full transition ${settings.allowRetake ? 'text-accent-600' : 'text-gray-400'}`}
               >
                 {settings.allowRetake ? <ToggleRight className="w-7 h-7" /> : <ToggleLeft className="w-7 h-7" />}
               </button>
@@ -148,9 +148,9 @@ function QuizBuilder({ questions, settings, onUpdateQuestions, onUpdateSettings 
           <button
             key={value}
             onClick={() => addQuestion(value)}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition text-sm font-medium text-gray-700"
+            className="flex items-center space-x-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg hover:border-accent-300 hover:bg-accent-50 transition text-sm font-medium text-gray-700"
           >
-            <Plus className="w-4 h-4 text-indigo-500" />
+            <Plus className="w-4 h-4 text-accent-500" />
             <Icon className="w-4 h-4" />
             <span>{label}</span>
           </button>
@@ -164,7 +164,7 @@ function QuestionCard({ question, index, isEditing, onEdit, onUpdate, onDelete, 
   const typeInfo = QUESTION_TYPES.find(t => t.value === question.type) || QUESTION_TYPES[0];
 
   return (
-    <div className={`bg-white rounded-xl border transition ${isEditing ? 'border-indigo-300 shadow-md' : 'border-gray-200'}`}>
+    <div className={`bg-white rounded-xl border transition ${isEditing ? 'border-accent-300 shadow-float' : 'border-gray-200'}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50 rounded-t-xl">
         <div className="flex items-center space-x-3">
@@ -172,7 +172,7 @@ function QuestionCard({ question, index, isEditing, onEdit, onUpdate, onDelete, 
             <button onClick={() => onMove(-1)} disabled={index === 0} className="text-gray-400 hover:text-gray-600 disabled:opacity-30"><GripVertical className="w-4 h-4" /></button>
           </div>
           <span className="text-sm font-semibold text-gray-500">Q{index + 1}</span>
-          <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">{typeInfo.label}</span>
+          <span className="text-xs px-2 py-0.5 bg-accent-100 text-accent-700 rounded-full">{typeInfo.label}</span>
           <span className="text-xs text-gray-400">{question.points} pts | {question.timeLimit}s</span>
         </div>
         <div className="flex items-center space-x-1">
@@ -221,7 +221,7 @@ function QuestionEditor({ question, onUpdate }) {
         value={question.text}
         onChange={(e) => onUpdate({ text: e.target.value })}
         placeholder="Enter your question..."
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 resize-none"
+        className="w-full px-3 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent resize-none"
         rows={2}
       />
 
@@ -231,7 +231,7 @@ function QuestionEditor({ question, onUpdate }) {
             <div key={i} className="flex items-center space-x-2">
               <button
                 onClick={() => onUpdate({ correctAnswer: i })}
-                className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold transition ${
+                className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-semibold transition ${
                   i === question.correctAnswer
                     ? 'border-green-500 bg-green-500 text-white'
                     : 'border-gray-300 text-gray-400 hover:border-green-400'
@@ -247,7 +247,7 @@ function QuestionEditor({ question, onUpdate }) {
                   onUpdate({ options: opts });
                 }}
                 placeholder={`Option ${String.fromCharCode(65 + i)}`}
-                className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 px-3 py-1.5 border border-line-strong rounded-lg text-sm focus-visible:ring-2 focus-visible:ring-accent"
               />
             </div>
           ))}
@@ -277,7 +277,7 @@ function QuestionEditor({ question, onUpdate }) {
           value={question.correctAnswer}
           onChange={(e) => onUpdate({ correctAnswer: e.target.value })}
           placeholder="Correct answer"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+          className="w-full px-3 py-2 border border-line-strong rounded-lg text-sm focus-visible:ring-2 focus-visible:ring-accent"
         />
       )}
 
@@ -320,26 +320,26 @@ function QuizStartScreen({ questions, settings, onStart }) {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-16 text-center">
-      <div className="bg-white rounded-2xl border shadow-sm p-8 space-y-6">
-        <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto">
-          <Play className="w-10 h-10 text-indigo-600 ml-1" />
+      <div className="bg-white rounded-xl border p-8 space-y-6">
+        <div className="w-20 h-20 bg-accent-100 rounded-full flex items-center justify-center mx-auto">
+          <Play className="w-10 h-10 text-accent-600 ml-1" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Ready to Start?</h2>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">Ready to Start?</h2>
           <p className="text-gray-500">Review the quiz details below before you begin.</p>
         </div>
 
         <div className="grid grid-cols-3 gap-4 text-center">
           <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-2xl font-bold text-indigo-600">{questions.length}</p>
+            <p className="text-2xl font-semibold text-accent-600">{questions.length}</p>
             <p className="text-xs text-gray-500 mt-1">Questions</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-2xl font-bold text-indigo-600">{totalPoints}</p>
+            <p className="text-2xl font-semibold text-accent-600">{totalPoints}</p>
             <p className="text-xs text-gray-500 mt-1">Total Points</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-2xl font-bold text-indigo-600">
+            <p className="text-2xl font-semibold text-accent-600">
               {minutes > 0 ? `${minutes}m` : ''}{seconds > 0 ? `${seconds}s` : minutes > 0 ? '' : '0s'}
             </p>
             <p className="text-xs text-gray-500 mt-1">Time Limit</p>
@@ -373,7 +373,7 @@ function QuizStartScreen({ questions, settings, onStart }) {
 
         <button
           onClick={onStart}
-          className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold text-lg active:scale-95"
+          className="w-full px-6 py-3 bg-accent-600 text-white rounded-lg hover:bg-accent-700 transition font-semibold text-lg "
         >
           Start Quiz
         </button>
@@ -515,15 +515,15 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
 
     return (
       <div className="max-w-lg mx-auto px-4 py-16 text-center space-y-6">
-        <div className="bg-white rounded-2xl border shadow-sm p-8 space-y-4">
+        <div className="bg-white rounded-xl border p-8 space-y-4">
           <div className={`w-24 h-24 rounded-full mx-auto flex items-center justify-center ${
             pct >= 80 ? 'bg-green-100' : pct >= 50 ? 'bg-amber-100' : 'bg-red-100'
           }`}>
-            <span className={`text-3xl font-bold ${
+            <span className={`text-3xl font-semibold ${
               pct >= 80 ? 'text-green-700' : pct >= 50 ? 'text-amber-700' : 'text-red-700'
             }`}>{pct}%</span>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900">
+          <h2 className="text-2xl font-semibold text-gray-900">
             {pct >= 80 ? 'Excellent!' : pct >= 50 ? 'Good effort!' : 'Keep practicing!'}
           </h2>
           <p className="text-gray-500 text-lg">
@@ -532,7 +532,7 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
 
           <div className="grid grid-cols-3 gap-3 pt-2">
             <div className="bg-green-50 rounded-lg p-3">
-              <p className="text-xl font-bold text-green-600">
+              <p className="text-xl font-semibold text-green-600">
                 {activeQuestions.filter(q => {
                   const a = answers[q.id];
                   if (q.type === 'fill-blank') return String(a || '').toLowerCase().trim() === String(q.correctAnswer).toLowerCase().trim();
@@ -542,7 +542,7 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
               <p className="text-xs text-green-700">Correct</p>
             </div>
             <div className="bg-red-50 rounded-lg p-3">
-              <p className="text-xl font-bold text-red-600">
+              <p className="text-xl font-semibold text-red-600">
                 {activeQuestions.filter(q => {
                   const a = answers[q.id];
                   if (a === undefined || a === null) return false;
@@ -553,7 +553,7 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
               <p className="text-xs text-red-700">Wrong</p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xl font-bold text-gray-600">
+              <p className="text-xl font-semibold text-gray-600">
                 {activeQuestions.filter(q => answers[q.id] === undefined || answers[q.id] === null).length}
               </p>
               <p className="text-xs text-gray-600">Skipped</p>
@@ -563,7 +563,7 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
           {settings.showResults && (
             <button
               onClick={() => setShowReview(true)}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition font-medium mt-4"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-accent-50 text-accent-700 rounded-lg hover:bg-accent-100 transition font-medium mt-4"
             >
               <Eye className="w-4 h-4" />
               <span>Review Answers</span>
@@ -587,13 +587,13 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
       <div className="mb-6">
         <div className="flex items-center justify-between text-sm text-gray-500 mb-1">
           <span>Question {currentIdx + 1} of {activeQuestions.length}</span>
-          <span className={`flex items-center space-x-1 font-mono ${timeLeft <= 30 ? 'text-red-600 font-bold' : ''}`}>
+          <span className={`flex items-center space-x-1 tabular-nums ${timeLeft <= 30 ? 'text-red-600 font-semibold' : ''}`}>
             <Clock className="w-4 h-4" />
             <span>{timerMinutes}:{String(timerSeconds).padStart(2, '0')}</span>
           </span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-1.5">
-          <div className="bg-indigo-500 h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
+          <div className="bg-accent-500 h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
         </div>
         {/* Timer bar */}
         <div className="w-full bg-gray-100 rounded-full h-1 mt-1">
@@ -605,10 +605,10 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
       </div>
 
       {/* Question */}
-      <div className="bg-white rounded-xl border shadow-sm p-6 mb-6">
+      <div className="bg-white rounded-xl border p-6 mb-6">
         <div className="flex items-start justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900 flex-1">{currentQ.text}</h3>
-          <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full ml-3 whitespace-nowrap">{currentQ.points} pts</span>
+          <span className="text-xs bg-accent-100 text-accent-700 px-2 py-0.5 rounded-full ml-3 whitespace-nowrap">{currentQ.points} pts</span>
         </div>
 
         {/* Answer options */}
@@ -620,7 +620,7 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
                 onClick={() => selectAnswer(i)}
                 className={`w-full text-left px-4 py-3 rounded-lg border-2 transition ${
                   answers[currentQ.id] === i
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    ? 'border-accent-500 bg-accent-50 text-accent-700'
                     : 'border-gray-200 hover:border-gray-300 text-gray-700'
                 }`}
               >
@@ -639,7 +639,7 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
                 onClick={() => selectAnswer(i)}
                 className={`flex-1 py-4 rounded-lg border-2 font-medium text-lg transition ${
                   answers[currentQ.id] === i
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    ? 'border-accent-500 bg-accent-50 text-accent-700'
                     : 'border-gray-200 hover:border-gray-300 text-gray-700'
                 }`}
               >
@@ -654,7 +654,7 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
             value={answers[currentQ.id] || ''}
             onChange={(e) => selectAnswer(e.target.value)}
             placeholder="Type your answer..."
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-lg focus-visible:ring-2 focus-visible:ring-accent focus:border-accent-500"
           />
         )}
       </div>
@@ -677,8 +677,8 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
               key={q.id}
               onClick={() => setCurrentIdx(i)}
               className={`w-2.5 h-2.5 rounded-full transition ${
-                i === currentIdx ? 'bg-indigo-600 scale-125' :
-                answers[q.id] !== undefined ? 'bg-indigo-300' : 'bg-gray-300'
+                i === currentIdx ? 'bg-accent-600 scale-125' :
+                answers[q.id] !== undefined ? 'bg-accent-300' : 'bg-gray-300'
               }`}
               title={`Question ${i + 1}`}
             />
@@ -687,7 +687,7 @@ function QuizPlayer({ questions, settings, userId, existingResponse, onSubmitRes
 
         <button
           onClick={nextQuestion}
-          className="flex items-center space-x-1 px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium"
+          className="flex items-center space-x-1 px-6 py-2.5 bg-accent-600 text-white rounded-lg hover:bg-accent-700 transition font-medium"
         >
           <span>{currentIdx === activeQuestions.length - 1 ? 'Finish' : 'Next'}</span>
           <ChevronRight className="w-5 h-5" />
@@ -708,11 +708,11 @@ function QuizResults({ response, questions, settings }) {
         <div className={`w-24 h-24 rounded-full mx-auto mb-4 flex items-center justify-center ${
           pct >= 80 ? 'bg-green-100' : pct >= 50 ? 'bg-amber-100' : 'bg-red-100'
         }`}>
-          <span className={`text-3xl font-bold ${
+          <span className={`text-3xl font-semibold ${
             pct >= 80 ? 'text-green-700' : pct >= 50 ? 'text-amber-700' : 'text-red-700'
           }`}>{pct}%</span>
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">
+        <h2 className="text-2xl font-semibold text-gray-900 mb-1">
           {pct >= 80 ? 'Excellent!' : pct >= 50 ? 'Good effort!' : 'Keep practicing!'}
         </h2>
         <p className="text-gray-500">
@@ -802,7 +802,7 @@ function QuizLeaderboard({ responses, questions }) {
           const pct = totalPoints > 0 ? Math.round((entry.score / totalPoints) * 100) : 0;
           return (
             <div key={entry.userId} className="flex items-center px-4 py-3">
-              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold mr-3 ${
+              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-semibold mr-3 ${
                 idx === 0 ? 'bg-amber-100 text-amber-700' :
                 idx === 1 ? 'bg-gray-200 text-gray-600' :
                 idx === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'
@@ -812,7 +812,7 @@ function QuizLeaderboard({ responses, questions }) {
                 <p className="text-xs text-gray-400">{new Date(entry.completedAt).toLocaleString()}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-bold text-gray-900">{entry.score}/{totalPoints}</p>
+                <p className="text-sm font-semibold text-gray-900">{entry.score}/{totalPoints}</p>
                 <p className="text-xs text-gray-500">{pct}%</p>
               </div>
             </div>
@@ -893,7 +893,7 @@ export default function QuizBoard() {
           <button
             onClick={() => setMode('builder')}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-              mode === 'builder' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'
+              mode === 'builder' ? 'bg-accent-100 text-accent-700' : 'text-gray-500 hover:bg-gray-100'
             }`}
           >
             <Edit3 className="w-4 h-4 inline mr-1" />
@@ -903,7 +903,7 @@ export default function QuizBoard() {
             onClick={() => setMode('player')}
             disabled={questions.length === 0}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-30 ${
-              mode === 'player' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'
+              mode === 'player' ? 'bg-accent-100 text-accent-700' : 'text-gray-500 hover:bg-gray-100'
             }`}
           >
             <Play className="w-4 h-4 inline mr-1" />
@@ -912,7 +912,7 @@ export default function QuizBoard() {
           <button
             onClick={() => setMode('results')}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-              mode === 'results' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'
+              mode === 'results' ? 'bg-accent-100 text-accent-700' : 'text-gray-500 hover:bg-gray-100'
             }`}
           >
             <Trophy className="w-4 h-4 inline mr-1" />
@@ -943,7 +943,7 @@ export default function QuizBoard() {
       {mode === 'results' && (
         <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
           {saving && (
-            <div className="flex items-center justify-center space-x-2 text-sm text-indigo-600">
+            <div className="flex items-center justify-center space-x-2 text-sm text-accent-600">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>Saving your response...</span>
             </div>
@@ -954,11 +954,11 @@ export default function QuizBoard() {
           {isOwner && <QuizLeaderboard responses={responses} questions={questions} />}
           {!existingResponse && !isOwner && questions.length > 0 && (
             <div className="text-center py-12">
-              <Play className="w-12 h-12 text-indigo-400 mx-auto mb-3" />
+              <Play className="w-12 h-12 text-accent-400 mx-auto mb-3" />
               <p className="text-gray-600 font-medium mb-4">Ready to take the quiz?</p>
               <button
                 onClick={() => setMode('player')}
-                className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium"
+                className="px-6 py-2.5 bg-accent-600 text-white rounded-lg hover:bg-accent-700 transition font-medium"
               >
                 Start Quiz
               </button>

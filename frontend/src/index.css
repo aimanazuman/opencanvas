@@ -2,133 +2,138 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --canvas: #F5F5F5;
+  --canvas-dot: #D4D4D4;
+  --surface: #FFFFFF;
+  --surface-hover: #F2F2F2;
+  --surface-press: #E8E8E8;
+  --line: #E2E2E2;
+  --line-strong: #8A8A8A;
+  --ink: #1A1A1A;
+  --ink-2: #5C5C5C;
+  --ink-3: #6B6B6B;
+  --accent: #0A66C2;
+  --accent-hover: #0856A3;
+  --accent-tint: #E6F1FB;
+  --danger: #C62828;
+  --danger-tint: #FDECEC;
+  --success: #1A7F37;
+  --success-tint: #E8F5EC;
+  --warning: #8A5A00;
+  --warning-tint: #FFF4DB;
+  --scrim: rgba(26, 26, 26, 0.40);
+  --ease: cubic-bezier(.2, 0, 0, 1);
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+/* One UI font for all text: the sans token in tailwind.config.js. Handwriting (font-hand) is for short display titles only. */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  @apply font-sans;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink);
+  background-color: var(--canvas);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+/* Form controls and buttons do not inherit font-family by default in browsers (they fall back to a system UI face).
+   Make them inherit explicitly so inputs, selects and textareas match the page text. */
+button,
+input,
+select,
+textarea,
+optgroup {
+  font-family: inherit;
 }
 
-/* Custom scrollbar */
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Workspace surfaces get the dot grid; forms and tables stay flat. */
+.canvas-dots {
+  background-color: var(--canvas);
+  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
+  background-size: 16px 16px;
+  background-attachment: local;
+}
+
+/* Neutral scrollbar */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 5px;
+  background: #C4C4C4;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #A8A8A8;
 }
 
 /* Focus ring for accessibility */
-*:focus-visible {
-  outline: 2px solid #6366f1;
+*:focus-visible,
+[role='button']:focus-visible,
+[role='menuitem']:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 4px;
 }
 
 button:focus:not(:focus-visible) {
   outline: none;
 }
 
-/* Page transition animation */
+/* Motion: opacity and a 4px translate only */
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fadeIn {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.2s var(--ease);
 }
 
-/* Modal entrance animation */
+/* Modal entrance */
 @keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-scaleIn {
-  animation: scaleIn 0.2s ease-out;
+  animation: scaleIn 0.2s var(--ease);
 }
 
-/* Dropdown slide animation */
+/* Dropdown */
 @keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-slideDown {
-  animation: slideDown 0.15s ease-out;
+  animation: slideDown 0.15s var(--ease);
 }
 
-/* Slide up animation (for toasts, bottom sheets) */
+/* Toasts, bottom sheets */
 @keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-slideUp {
-  animation: slideUp 0.25s ease-out;
-}
-
-/* Staggered fade-in for list items */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fadeInUp {
-  animation: fadeInUp 0.35s ease-out both;
+  animation: slideUp 0.2s var(--ease);
 }
 
 /* Backdrop fade for modals */
@@ -138,7 +143,7 @@ button:focus:not(:focus-visible) {
 }
 
 .animate-backdropFade {
-  animation: backdropFade 0.2s ease-out;
+  animation: backdropFade 0.2s var(--ease);
 }
 
 /* Pulse for unsaved indicator */
@@ -151,33 +156,27 @@ button:focus:not(:focus-visible) {
   animation: pulse-dot 1.5s ease-in-out infinite;
 }
 
-/* Slide right for version history panel */
+/* Floating panels slide in from the right */
 @keyframes slideRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+  from { transform: translateX(8px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }
 
 .animate-slideRight {
-  animation: slideRight 0.25s ease-out;
+  animation: slideRight 0.2s var(--ease);
 }
 
-/* Loading skeleton shimmer */
+/* Loading skeleton: neutral shimmer */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background: linear-gradient(90deg, #EDEDED 25%, #F5F5F5 50%, #EDEDED 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 0.375rem;
+  border-radius: 4px;
 }
 
 /* Line clamp utility */
@@ -188,61 +187,26 @@ button:focus:not(:focus-visible) {
   overflow: hidden;
 }
 
-/* Smooth scroll for anchor links */
-html {
-  scroll-behavior: smooth;
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
-/* Page transition — gentle crossfade only */
+/* Page transition: crossfade only */
 @keyframes pageEnter {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
 .animate-pageEnter {
-  animation: pageEnter 0.25s ease-out;
+  animation: pageEnter 0.2s var(--ease);
 }
-
-/* Scroll-reveal: elements start hidden, animate in when .is-visible */
-.scroll-reveal {
-  opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
-              transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.scroll-reveal.is-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Stagger delays for grid children */
-.stagger-1 { transition-delay: 0.05s; }
-.stagger-2 { transition-delay: 0.1s; }
-.stagger-3 { transition-delay: 0.15s; }
-.stagger-4 { transition-delay: 0.2s; }
-.stagger-5 { transition-delay: 0.25s; }
-.stagger-6 { transition-delay: 0.3s; }
 
 /* Splash screen */
-@keyframes splashLogo {
-  0% {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.02);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes splashDots {
-  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-  40% { opacity: 1; transform: scale(1); }
+@keyframes splashBar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
 }
 
 @keyframes splashExit {
@@ -250,54 +214,187 @@ html {
   to { opacity: 0; pointer-events: none; }
 }
 
-.animate-splashLogo {
-  animation: splashLogo 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
 .animate-splashExit {
-  animation: splashExit 0.4s ease-out forwards;
+  animation: splashExit 0.2s var(--ease) forwards;
 }
 
-.splash-dot {
-  animation: splashDots 1.4s ease-in-out infinite both;
-}
-.splash-dot:nth-child(2) { animation-delay: 0.16s; }
-.splash-dot:nth-child(3) { animation-delay: 0.32s; }
-
-/* Nav active link indicator */
-@keyframes navUnderline {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
+.splash-bar {
+  animation: splashBar 1.2s var(--ease) infinite;
 }
 
-.nav-link-active::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: white;
-  border-radius: 1px;
-  transform-origin: left;
-  animation: navUnderline 0.25s ease-out forwards;
-}
-
-/* Mobile menu slide */
+/* Mobile menu */
 @keyframes mobileMenuSlide {
-  from {
-    opacity: 0;
-    max-height: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    max-height: 500px;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-mobileMenu {
-  animation: mobileMenuSlide 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  overflow: hidden;
+  animation: mobileMenuSlide 0.2s var(--ease) forwards;
+}
+
+/* Touch targets: 44px minimum hit area on small screens */
+@media (max-width: 767px) {
+  button,
+  [role='button'],
+  select,
+  input[type='checkbox'],
+  input[type='radio'] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    min-height: 0;
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .skeleton {
+    animation: none;
+    background: #EDEDED;
+  }
+}
+
+@media (max-width: 767px) {
+  body.has-bottom-bar {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ===== Motion (restored). Opacity and transform only, 150 to 300 ms.
+   Every rule that moves something sits inside no-preference; the reduce block below cancels the rest. */
+@media (prefers-reduced-motion: no-preference) {
+  /* Scroll reveal: IntersectionObserver in HomePage/AboutPage adds .is-visible. */
+  .scroll-reveal {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+    transition-property: opacity, transform;
+    transition-duration: 300ms;
+    transition-timing-function: var(--ease);
+  }
+  .scroll-reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+  .scroll-reveal.reveal-delay-1 { transition-delay: 60ms; }
+  .scroll-reveal.reveal-delay-2 { transition-delay: 120ms; }
+  .scroll-reveal.reveal-delay-3 { transition-delay: 180ms; }
+  .scroll-reveal.reveal-delay-4 { transition-delay: 240ms; }
+
+  /* Card lift. Uses the individual translate property so it stacks with scroll-reveal's transform.
+     The shadow fades in on a pseudo-element so only opacity and transform animate. */
+  .lift {
+    position: relative;
+    isolation: isolate;
+    transition-property: translate;
+    transition-duration: 200ms;
+    transition-timing-function: var(--ease);
+  }
+  .lift::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .10), 0 0 0 1px rgba(0, 0, 0, .06);
+    opacity: 0;
+    transition: opacity 200ms var(--ease);
+    pointer-events: none;
+  }
+
+  /* Button hover lift and press. Replaces transition-colors so colour still animates. */
+  .btn-motion {
+    transition-property: color, background-color, border-color, translate;
+    transition-duration: 150ms;
+    transition-timing-function: var(--ease);
+  }
+  .btn-motion:active:not(:disabled) {
+    translate: 0 1px;
+    transition-duration: 80ms;
+  }
+
+}
+
+/* Hover effects only where a pointer can hover, so touch screens do not keep a lifted card. */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .lift:hover { translate: 0 -2px; }
+  .lift:hover::after { opacity: 1; }
+  .btn-motion:hover:not(:disabled) { translate: 0 -1px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-reveal { opacity: 1; transform: none; transition: none; }
+  .lift, .lift::after, .btn-motion { transition: none; }
+  .lift:hover, .btn-motion:hover, .btn-motion:active { translate: none; }
+  .lift::after { display: none; }
+  .animate-oc-rise,
+  .animate-oc-fade-in,
+  .animate-oc-draw,
+  .animate-oc-breathe { animation: none; }
+}
+
+/* ===== Classroom surfaces (public home page). Flat colour plus small SVG textures, no gradients. */
+.paper-rules {
+  position: relative;
+  background-color: #FFFCF4;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='28'%3E%3Crect y='27' width='8' height='1' fill='%23BFD6EA'/%3E%3C/svg%3E");
+}
+
+.paper-rules::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 12px;
+  width: 2px;
+  background-color: #D9534F;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Margin sits just left of a 1024px content column, centred on wide screens. */
+@media (min-width: 768px) {
+  .paper-rules::before { left: max(12px, calc(50% - 500px)); }
+}
+
+.chalkboard {
+  background-color: #2F4D3C;
+  box-shadow: inset 0 0 0 1px rgba(245, 243, 234, .10), inset 0 0 24px rgba(0, 0, 0, .15);
+}
+
+.wood-frame {
+  background-color: #8B5E3C;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='24'%3E%3Cpath d='M0 6 Q20 3 40 6 T80 6 M0 17 Q22 14 44 17 T80 17' stroke='%23A8714A' stroke-opacity='.45' fill='none'/%3E%3C/svg%3E");
+}
+
+.cork-board {
+  background-color: #C99A6B;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Ccircle cx='4' cy='6' r='.9' fill='%23A9784A'/%3E%3Ccircle cx='19' cy='13' r='.7' fill='%23B5835A'/%3E%3Ccircle cx='27' cy='25' r='.9' fill='%23A9784A'/%3E%3Ccircle cx='11' cy='27' r='.6' fill='%23B5835A'/%3E%3C/svg%3E");
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
+}
+
+/* ===== Classroom component layer (phase 1). New class names or the opt-in .classroom scope only. */
+
+/* Ruled paper without the red margin (PaperPanel ruled, margin off). Decorative, same tile as .paper-rules. */
+.paper-lines {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='28'%3E%3Crect y='27' width='8' height='1' fill='%23BFD6EA'/%3E%3C/svg%3E");
+}
+
+/* Chalk-ink focus ring for any control on a chalkboard inside the classroom scope (contrast 8.41:1). */
+.classroom .chalkboard :focus-visible {
+  outline: 2px solid #F5F3EA;
+  outline-offset: 2px;
+}
+
+/* No-JS fallback: scroll-reveal items are hidden only while useScrollReveal has set html.js-reveal. */
+html:not(.js-reveal) .scroll-reveal {
+  opacity: 1;
+  transform: none;
 }

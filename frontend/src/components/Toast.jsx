@@ -10,18 +10,18 @@ const ICONS = {
   info: Info,
 };
 
-const COLORS = {
-  success: 'bg-green-50 border-green-200 text-green-800',
-  error: 'bg-red-50 border-red-200 text-red-800',
-  warning: 'bg-amber-50 border-amber-200 text-amber-800',
-  info: 'bg-blue-50 border-blue-200 text-blue-800',
+const BAR_COLORS = {
+  success: 'border-l-success',
+  error: 'border-l-danger',
+  warning: 'border-l-warning',
+  info: 'border-l-accent',
 };
 
 const ICON_COLORS = {
-  success: 'text-green-500',
-  error: 'text-red-500',
-  warning: 'text-amber-500',
-  info: 'text-blue-500',
+  success: 'text-success',
+  error: 'text-danger',
+  warning: 'text-warning',
+  info: 'text-accent',
 };
 
 let toastId = 0;
@@ -55,21 +55,23 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={toast}>
       {children}
       {/* Toast container */}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col space-y-2 max-w-sm">
+      <div className="fixed bottom-20 md:bottom-4 inset-x-4 md:inset-x-auto md:right-4 z-[100] flex flex-col space-y-2 md:max-w-sm">
         {toasts.map(t => {
           const Icon = ICONS[t.type] || Info;
           return (
             <div
               key={t.id}
-              className={`flex items-start space-x-3 px-4 py-3 rounded-lg border shadow-lg animate-slideUp ${COLORS[t.type]}`}
+              role={t.type === 'error' ? 'alert' : 'status'}
+              className={`flex items-start gap-2 px-3 py-2 rounded bg-surface text-ink border border-line border-l-4 shadow-pop animate-slideUp ${BAR_COLORS[t.type]}`}
             >
-              <Icon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${ICON_COLORS[t.type]}`} />
-              <p className="text-sm flex-1">{t.message}</p>
+              <Icon aria-hidden="true" strokeWidth={1.5} className={`w-4 h-4 flex-shrink-0 mt-0.5 ${ICON_COLORS[t.type]}`} />
+              <p className="text-sm flex-1 text-ink">{t.message}</p>
               <button
                 onClick={() => removeToast(t.id)}
-                className="flex-shrink-0 p-0.5 hover:bg-black/5 rounded transition"
+                aria-label="Dismiss"
+                className="flex-shrink-0 w-7 h-7 flex items-center justify-center hover:bg-surface-hover rounded transition"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
               </button>
             </div>
           );

@@ -139,15 +139,15 @@ export const DEMO_BOARDS = [
       ],
     },
     schedule: {
-      '2026-01-26_09': { id: 'e1', subject: 'CS301 - Web Tech', color: '#6366f1', notes: 'Review HTML5 semantics before class', files: [], links: [{ id: 'l1', url: 'https://developer.mozilla.org/en-US/docs/Web/HTML' }], done: false, reminderAt: null, comments: [] },
+      '2026-01-26_09': { id: 'e1', subject: 'CS301 - Web Tech', color: '#0A66C2', notes: 'Review HTML5 semantics before class', files: [], links: [{ id: 'l1', url: 'https://developer.mozilla.org/en-US/docs/Web/HTML' }], done: false, reminderAt: null, comments: [] },
       '2026-01-26_11': { id: 'e2', subject: 'CS202 - Data Structures', color: '#10b981', notes: 'Bring printed notes on sorting algorithms', files: [], links: [], done: false, reminderAt: '2026-01-27T10:30', comments: [{ id: 'sc1', text: 'Quiz announced for this session!', author: 'Ahmad Razak', createdAt: new Date(Date.now() - 86400000).toISOString() }] },
       '2026-01-26_14': { id: 'e3', subject: 'Study Session', color: '#f59e0b', notes: '', files: [], links: [], done: true, reminderAt: null, comments: [] },
       '2026-01-27_09': { id: 'e4', subject: 'CS303 - Cybersecurity', color: '#ef4444', notes: 'Lab report due next week', files: [], links: [], done: false, reminderAt: null, comments: [] },
-      '2026-01-27_14': { id: 'e5', subject: 'CS301 - Lab', color: '#6366f1', notes: '', files: [], links: [], done: false, reminderAt: null, comments: [] },
-      '2026-01-28_09': { id: 'e6', subject: 'CS301 - Web Tech', color: '#6366f1', notes: '', files: [], links: [], done: true, reminderAt: null, comments: [] },
+      '2026-01-27_14': { id: 'e5', subject: 'CS301 - Lab', color: '#0A66C2', notes: '', files: [], links: [], done: false, reminderAt: null, comments: [] },
+      '2026-01-28_09': { id: 'e6', subject: 'CS301 - Web Tech', color: '#0A66C2', notes: '', files: [], links: [], done: true, reminderAt: null, comments: [] },
       '2026-01-28_11': { id: 'e7', subject: 'CS202 - Data Structures', color: '#10b981', notes: '', files: [], links: [], done: false, reminderAt: null, comments: [] },
       '2026-01-29_09': { id: 'e8', subject: 'CS303 - Cybersecurity', color: '#ef4444', notes: '', files: [], links: [], done: false, reminderAt: null, comments: [] },
-      '2026-01-29_14': { id: 'e9', subject: 'Group Study', color: '#8b5cf6', notes: 'Meet at library room 3B', files: [], links: [], done: false, reminderAt: '2026-01-29T13:45', comments: [] },
+      '2026-01-29_14': { id: 'e9', subject: 'Group Study', color: '#0F8B8D', notes: 'Meet at library room 3B', files: [], links: [], done: false, reminderAt: '2026-01-29T13:45', comments: [] },
       '2026-01-30_09': { id: 'e10', subject: 'CS202 - Lab', color: '#10b981', notes: '', files: [], links: [], done: false, reminderAt: null, comments: [] },
       '2026-01-30_14': { id: 'e11', subject: 'Free Study', color: '#f59e0b', notes: '', files: [], links: [], done: false, reminderAt: null, comments: [] },
     },
@@ -256,7 +256,7 @@ export const DEMO_BOARDS = [
       {
         id: 'col-2',
         title: 'In Progress',
-        color: '#3b82f6',
+        color: '#1F76CB',
         cards: [
           {
             id: 'card-4',
@@ -348,7 +348,7 @@ export const DEMO_BOARDS = [
     columns: [
       { id: 'col-a', title: 'Backlog', color: '#6b7280', cards: [{ id: 'ck1', content: 'Research linked list implementations', type: 'text', imageUrl: '', videoUrl: '', linkUrl: '', comments: [], createdAt: new Date().toISOString(), author: null }] },
       { id: 'col-b', title: 'In Progress', color: '#f59e0b', cards: [] },
-      { id: 'col-c', title: 'Review', color: '#8b5cf6', cards: [] },
+      { id: 'col-c', title: 'Review', color: '#0F8B8D', cards: [] },
       { id: 'col-d', title: 'Done', color: '#22c55e', cards: [] },
     ],
   },
@@ -569,7 +569,7 @@ export function createEmptyBoard(type, name = 'Untitled Board') {
         ...base,
         columns: [
           { id: generateId(), title: 'To Do', color: '#6b7280', cards: [] },
-          { id: generateId(), title: 'In Progress', color: '#3b82f6', cards: [] },
+          { id: generateId(), title: 'In Progress', color: '#1F76CB', cards: [] },
           { id: generateId(), title: 'Done', color: '#22c55e', cards: [] },
         ],
       };

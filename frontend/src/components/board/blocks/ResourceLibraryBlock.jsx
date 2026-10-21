@@ -1,9 +1,13 @@
 import React, { useState, useRef } from 'react';
-import { FolderOpen, Upload, Trash2, Eye, Download, Loader2 } from 'lucide-react';
+import { FolderOpen, Upload, Trash2, Eye, Download, Loader2, FileText } from 'lucide-react';
 import { getFileTypeInfo, isPreviewable } from '../../../utils/fileIcons';
 import DocumentPreviewModal from '../DocumentPreviewModal';
 import { uploadFiles } from '../../../utils/fileUpload';
 import { resolveMediaUrl } from '../../../utils/media';
+import { ChalkBadge } from '../../classroom';
+
+// 44 px on phones, 32 px on desktop. The title attribute is the accessible name.
+const ICON_BTN = 'btn-motion flex h-11 w-11 flex-none items-center justify-center rounded hover:bg-surface-hover md:h-8 md:w-8';
 
 export default function ResourceLibraryBlock({ block, canEdit, onUpdate, onDelete }) {
   const [editingTitle, setEditingTitle] = useState(false);
@@ -97,45 +101,58 @@ export default function ResourceLibraryBlock({ block, canEdit, onUpdate, onDelet
   };
 
   return (
-    <div className="border border-teal-200 rounded-lg bg-teal-50">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-teal-200">
-        <div className="flex items-center gap-2">
-          <FolderOpen size={18} className="text-teal-600" />
+    <div className="rounded-lg border border-line bg-surface">
+      <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <FolderOpen size={18} strokeWidth={1.5} className="flex-shrink-0 text-teal-700" aria-hidden="true" />
           {editingTitle && canEdit ? (
             <input
               type="text"
+              aria-label="Resource library title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={handleTitleSave}
               onKeyDown={(e) => e.key === 'Enter' && handleTitleSave()}
-              className="text-sm font-semibold border-b border-teal-400 bg-transparent outline-none"
+              className="border-b border-line-strong bg-transparent text-sm font-semibold text-ink outline-none"
               autoFocus
             />
           ) : (
-            <h4
-              className={`text-sm font-semibold text-teal-800 ${canEdit ? 'cursor-pointer hover:text-teal-600' : ''}`}
-              onClick={() => canEdit && setEditingTitle(true)}
-            >
-              {block.title || 'Resource Library'}
+            <h4 className="text-sm font-semibold text-ink">
+              {canEdit ? (
+                <button
+                  type="button"
+                  className="btn-motion text-left hover:text-accent"
+                  onClick={() => setEditingTitle(true)}
+                >
+                  {block.title || 'Resource Library'}
+                </button>
+              ) : (
+                block.title || 'Resource Library'
+              )}
             </h4>
           )}
-          <span className="text-xs text-teal-500">({files.length} files)</span>
+          <span className="text-xs text-ink-2">({files.length} files)</span>
         </div>
         <div className="flex items-center gap-1">
           {canEdit && (
             <>
               <button
+                type="button"
                 onClick={() => !uploading && fileInputRef.current?.click()}
                 disabled={uploading}
-                className="p-1.5 text-teal-600 hover:bg-teal-100 rounded disabled:opacity-50"
+                className={`${ICON_BTN} text-teal-700 disabled:opacity-50`}
                 title="Upload files"
+                aria-label="Upload files"
               >
-                {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                {uploading
+                  ? <Loader2 size={16} strokeWidth={1.5} className="motion-safe:animate-spin" aria-hidden="true" />
+                  : <Upload size={16} strokeWidth={1.5} aria-hidden="true" />}
               </button>
               <input
                 ref={fileInputRef}
                 type="file"
                 multiple
+                aria-label="Upload resource files"
                 onChange={handleUpload}
                 className="hidden"
                 disabled={uploading}
@@ -143,63 +160,70 @@ export default function ResourceLibraryBlock({ block, canEdit, onUpdate, onDelet
             </>
           )}
           {canEdit && (
-            <button onClick={onDelete} className="p-1.5 text-gray-400 hover:text-red-500 rounded" title="Remove library">
-              <Trash2 size={16} />
+            <button
+              type="button"
+              onClick={onDelete}
+              className={`${ICON_BTN} text-ink-2 hover:text-danger`}
+              title="Remove library"
+              aria-label="Remove library"
+            >
+              <Trash2 size={16} strokeWidth={1.5} aria-hidden="true" />
             </button>
           )}
         </div>
       </div>
 
       {files.length === 0 ? (
-        <div className="px-4 py-6 text-center text-sm text-teal-500">
+        <div className="px-4 py-6 text-center text-sm text-ink-2">
           {canEdit ? 'Click upload to add resources' : 'No resources yet'}
         </div>
       ) : (
-        <ul className="divide-y divide-teal-100">
+        <ul className="divide-y divide-line">
           {files.map((file) => {
             const typeInfo = getFileTypeInfo(file.name);
             const canPreview = isPreviewable(file.name);
             const isUploading = file._uploading;
             return (
-              <li key={file.id} className="px-4 py-2 flex items-center gap-3 hover:bg-teal-100">
+              <li key={file.id} className="flex items-center gap-3 px-4 py-2 hover:bg-surface-hover">
                 {isUploading ? (
-                  <Loader2 size={14} className="text-teal-500 animate-spin shrink-0" />
+                  <Loader2 size={14} strokeWidth={1.5} className="flex-shrink-0 text-accent motion-safe:animate-spin" aria-hidden="true" />
                 ) : (
-                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${typeInfo.bg} ${typeInfo.color}`}>
-                    {typeInfo.label}
-                  </span>
+                  <ChalkBadge icon={FileText} label={typeInfo.label} />
                 )}
-                <span className="text-sm text-gray-800 truncate flex-1">
+                <span className="flex-1 min-w-0 truncate text-sm text-ink">
                   {file.name}
-                  {isUploading && <span className="text-xs text-teal-500 ml-2">uploading...</span>}
+                  {isUploading && <span className="ml-2 text-xs text-ink-2">uploading...</span>}
                 </span>
-                <span className="text-xs text-gray-400 shrink-0">{formatSize(file.size)}</span>
-                <div className="flex items-center gap-1 shrink-0">
+                <span className="flex-shrink-0 text-xs text-ink-2">{formatSize(file.size)}</span>
+                <div className="flex flex-shrink-0 items-center gap-1">
                   {canPreview && !isUploading && (
                     <button
+                      type="button"
                       onClick={() => openFile(file, 'preview')}
-                      className="p-1 text-gray-400 hover:text-blue-600"
+                      className={`${ICON_BTN} text-ink-2`}
                       title="Preview"
                     >
-                      <Eye size={14} />
+                      <Eye size={14} strokeWidth={1.5} aria-hidden="true" />
                     </button>
                   )}
                   {file.url && !isUploading && (
                     <button
+                      type="button"
                       onClick={() => openFile(file, 'download')}
-                      className="p-1 text-gray-400 hover:text-green-600"
+                      className={`${ICON_BTN} text-ink-2`}
                       title="Download"
                     >
-                      <Download size={14} />
+                      <Download size={14} strokeWidth={1.5} aria-hidden="true" />
                     </button>
                   )}
                   {canEdit && (
                     <button
+                      type="button"
                       onClick={() => handleRemoveFile(file.id)}
-                      className="p-1 text-gray-400 hover:text-red-500"
+                      className={`${ICON_BTN} text-ink-2 hover:text-danger`}
                       title="Remove"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={14} strokeWidth={1.5} aria-hidden="true" />
                     </button>
                   )}
                 </div>

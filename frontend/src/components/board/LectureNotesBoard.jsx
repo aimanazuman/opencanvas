@@ -6,16 +6,24 @@ import { BLOCK_TYPES } from '../../utils/boardHelpers';
 import BlockRenderer from './BlockRenderer';
 import CommentThread from './CommentThread';
 import AddBlockMenu from './AddBlockMenu';
+import { ClassroomButton, StickyNote as EmptyNote } from '../classroom';
 
-
+// Section panels stay white. Only the icon carries the section's label colour.
 const SECTION_STYLES = {
-  Topic: { bg: 'bg-purple-50', border: 'border-purple-200', title: 'text-purple-800' },
-  Content: { bg: 'bg-white', border: 'border-gray-200', title: 'text-gray-800' },
-  Summary: { bg: 'bg-blue-50', border: 'border-blue-200', title: 'text-blue-800' },
-  Resources: { bg: 'bg-teal-50', border: 'border-teal-200', title: 'text-teal-800' },
-  Announcements: { bg: 'bg-orange-50', border: 'border-orange-200', title: 'text-orange-800' },
-  'Student Resources': { bg: 'bg-amber-50', border: 'border-amber-200', title: 'text-amber-800' },
+  Topic: { tone: 'text-teal-700' },
+  Content: { tone: 'text-ink-2' },
+  Summary: { tone: 'text-accent' },
+  Resources: { tone: 'text-teal-700' },
+  Announcements: { tone: 'text-orange-700' },
+  'Student Resources': { tone: 'text-amber-700' },
 };
+
+// Hand font only for short section titles (under 40 characters).
+const titleFont = (title) => ((title || '').length < 40 ? 'font-hand text-lg' : 'text-base font-semibold');
+
+const SECTION = 'rounded-xl border border-line border-t-2 border-t-wood bg-surface p-6';
+// 44 px on phones, 32 px on desktop. Colour is added per state by the caller.
+const ICON_BTN = 'btn-motion flex h-11 w-11 flex-shrink-0 items-center justify-center rounded md:h-8 md:w-8';
 
 export default function LectureNotesBoard() {
   const {
@@ -76,18 +84,15 @@ export default function LectureNotesBoard() {
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
       {/* Student toolbar - bookmarks filter */}
       {isStudent && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 rounded-lg border">
-          <button
+        <div className="flex items-center gap-3 px-4 py-2 rounded-lg border border-line bg-surface">
+          <ClassroomButton
+            variant={showBookmarkedOnly ? 'primary' : 'secondary'}
+            aria-pressed={showBookmarkedOnly}
             onClick={() => setShowBookmarkedOnly(!showBookmarkedOnly)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition ${
-              showBookmarkedOnly
-                ? 'bg-amber-100 text-amber-700 border border-amber-300'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
           >
-            <Bookmark size={14} className={showBookmarkedOnly ? 'fill-amber-500' : ''} />
+            <Bookmark size={14} strokeWidth={1.5} className={showBookmarkedOnly ? 'fill-current' : ''} aria-hidden="true" />
             Show Bookmarked ({bookmarkedIds.length})
-          </button>
+          </ClassroomButton>
         </div>
       )}
 
@@ -95,12 +100,9 @@ export default function LectureNotesBoard() {
         const styles = SECTION_STYLES[section.title] || SECTION_STYLES.Content;
 
         return (
-          <div
-            key={section.id}
-            className={`${styles.bg} border ${styles.border} rounded-xl p-6`}
-          >
-            <h2 className={`text-lg font-bold ${styles.title} mb-4 flex items-center space-x-2`}>
-              <BookOpen className="w-5 h-5" />
+          <div key={section.id} className={SECTION}>
+            <h2 className={`mb-4 flex items-center gap-2 text-ink ${titleFont(section.title)}`}>
+              <BookOpen className={`h-5 w-5 flex-shrink-0 ${styles.tone}`} strokeWidth={1.5} aria-hidden="true" />
               <span>{section.title}</span>
             </h2>
 
@@ -122,17 +124,18 @@ export default function LectureNotesBoard() {
                   const personalNote = getPersonalNote(block.id, userId);
 
                   return (
-                    <div key={block.id} className={`relative ${blockBookmarked ? 'ring-2 ring-amber-300 rounded-lg' : ''}`}>
+                    <div key={block.id} className={`relative rounded-lg ${blockBookmarked ? 'ring-2 ring-amber-700' : ''}`}>
                       {/* Bookmark button for students */}
                       {isStudent && block.type !== BLOCK_TYPES.PERSONAL_NOTE && (
                         <button
+                          type="button"
                           onClick={() => handleToggleBookmark(block.id)}
-                          className={`absolute top-2 right-2 z-10 p-1 rounded ${
-                            blockBookmarked ? 'text-amber-500' : 'text-gray-300 hover:text-amber-400'
+                          className={`${ICON_BTN} absolute top-2 right-2 z-10 ${
+                            blockBookmarked ? 'text-amber-700' : 'text-ink-3 hover:text-amber-700'
                           }`}
                           title={blockBookmarked ? 'Remove bookmark' : 'Bookmark this block'}
                         >
-                          <Bookmark size={16} className={blockBookmarked ? 'fill-amber-500' : ''} />
+                          <Bookmark size={16} strokeWidth={1.5} className={blockBookmarked ? 'fill-current' : ''} aria-hidden="true" />
                         </button>
                       )}
 
@@ -149,54 +152,50 @@ export default function LectureNotesBoard() {
                       {isStudent && block.type !== BLOCK_TYPES.PERSONAL_NOTE && (
                         <div className="mt-2">
                           {editingNote === block.id ? (
-                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                              <div className="flex items-center gap-1 mb-2 text-xs text-amber-600">
-                                <Lock size={10} />
+                            <div className="rounded-lg border border-line bg-surface p-3">
+                              <div className="mb-2 flex items-center gap-1 text-xs text-ink-2">
+                                <Lock size={12} strokeWidth={1.5} aria-hidden="true" />
                                 <span>Personal Note (only you can see this)</span>
                               </div>
                               <textarea
+                                aria-label="Personal note"
                                 value={noteText}
                                 onChange={(e) => setNoteText(e.target.value)}
-                                className="w-full px-2 py-1.5 border border-amber-300 rounded text-sm bg-white resize-none"
+                                className="w-full resize-none rounded border border-line-strong bg-surface px-2 py-1.5 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                 rows={2}
                                 placeholder="Write a personal note..."
                                 autoFocus
                               />
                               <div className="flex gap-2 mt-2">
-                                <button
-                                  onClick={() => handleSavePersonalNote(block.id)}
-                                  className="px-2 py-1 bg-amber-500 text-white rounded text-xs hover:bg-amber-600"
-                                >
+                                <ClassroomButton variant="primary" onClick={() => handleSavePersonalNote(block.id)}>
                                   Save
-                                </button>
-                                <button
-                                  onClick={() => setEditingNote(null)}
-                                  className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300"
-                                >
+                                </ClassroomButton>
+                                <ClassroomButton variant="ghost" onClick={() => setEditingNote(null)}>
                                   Cancel
-                                </button>
+                                </ClassroomButton>
                               </div>
                             </div>
                           ) : personalNote ? (
-                            <div
-                              onClick={() => handleStartEditNote(block.id)}
-                              className="bg-amber-50 border border-amber-200 rounded-lg p-3 cursor-pointer hover:bg-amber-100"
-                            >
-                              <div className="flex items-center gap-1 mb-1 text-xs text-amber-600">
-                                <StickyNote size={10} />
-                                <Lock size={10} />
-                                <span>Your Note</span>
-                              </div>
-                              <p className="text-sm text-amber-800">{personalNote}</p>
-                            </div>
-                          ) : (
                             <button
+                              type="button"
                               onClick={() => handleStartEditNote(block.id)}
-                              className="text-xs text-amber-500 hover:text-amber-600 flex items-center gap-1"
+                              className="btn-motion block w-full rounded-lg border border-line bg-surface p-3 text-left hover:bg-surface-hover"
                             >
-                              <StickyNote size={12} />
-                              Add personal note
+                              <span className="mb-1 flex items-center gap-1 text-xs text-ink-2">
+                                <StickyNote size={12} strokeWidth={1.5} aria-hidden="true" />
+                                <Lock size={12} strokeWidth={1.5} aria-hidden="true" />
+                                <span>Your Note</span>
+                              </span>
+                              <span className="block whitespace-pre-wrap text-sm text-ink">{personalNote}</span>
                             </button>
+                          ) : (
+                            <ClassroomButton
+                              variant="ghost"
+                              icon={StickyNote}
+                              onClick={() => handleStartEditNote(block.id)}
+                            >
+                              Add personal note
+                            </ClassroomButton>
                           )}
                         </div>
                       )}
@@ -212,7 +211,7 @@ export default function LectureNotesBoard() {
                 })}
 
               {section.blocks.length === 0 && (
-                <p className="text-sm text-gray-400 italic">No content yet</p>
+                <EmptyNote as="p" color="azure" className="text-sm">No content yet</EmptyNote>
               )}
             </div>
 

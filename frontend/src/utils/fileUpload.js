@@ -1,13 +1,49 @@
 import { filesApi } from '../services/api';
 
-function uploadErrorMessage(error) {
-  const data = error?.response?.data;
-  const pick = (value) => (Array.isArray(value) ? value[0] : value);
-  if (data) {
-    const message = pick(data.file) || pick(data.detail) || pick(data.error) || pick(data.board) || pick(data.non_field_errors);
-    if (typeof message === 'string') return message;
+const DEFAULT_UPLOAD_ERROR = 'The file could not be uploaded.';
+const MAX_MESSAGE_LENGTH = 300;
+const MAX_DEPTH = 4;
+// Checked first, in this order. Other keys are read after them.
+const PRIORITY_KEYS = ['detail', 'error', 'non_field_errors', 'file', 'board'];
+
+// Server text is shown as plain text. Strings that look like markup (for example an HTML page from a proxy) are skipped.
+function textMessage(value) {
+  const text = value.trim();
+  if (!text || /[<>]/.test(text)) return null;
+  return text.slice(0, MAX_MESSAGE_LENGTH);
+}
+
+// DRF error bodies take several shapes: a bare string, a list of strings (ValidationError(msg) gives a top-level
+// array), {field: [...]}, or {detail} / {error}. Return the first usable string.
+function findMessage(value, depth = 0) {
+  if (value == null || depth > MAX_DEPTH) return null;
+  if (typeof value === 'string') return textMessage(value);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findMessage(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
   }
-  return 'The file could not be uploaded.';
+  if (typeof value === 'object') {
+    const keys = [
+      ...PRIORITY_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(value, key)),
+      ...Object.keys(value).filter((key) => !PRIORITY_KEYS.includes(key)),
+    ];
+    for (const key of keys) {
+      const found = findMessage(value[key], depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * Message to show for a failed upload. Quota errors reach the user as the server's own text.
+ * Exported for tests.
+ */
+export function uploadErrorMessage(error) {
+  return findMessage(error?.response?.data) || DEFAULT_UPLOAD_ERROR;
 }
 
 /**

@@ -1,9 +1,14 @@
 import React, { useState, useRef } from 'react';
 import { safeUrlWithDefaultScheme } from '../../../utils/safeUrl';
-import { Plus, X, Paperclip, FileText, Loader2, ImageIcon } from 'lucide-react';
-import { createKanbanCard, generateId } from '../../../utils/boardHelpers';
+import { Plus, X, Paperclip, FileText, Loader2 } from 'lucide-react';
+import { createKanbanCard } from '../../../utils/boardHelpers';
 import { formatFileSize } from '../../../utils/fileIcons';
 import { uploadFiles } from '../../../utils/fileUpload';
+import { ClassroomButton } from '../../classroom';
+
+// Inputs stay white and flat: no ruled or textured surface behind anything the user types into.
+const FIELD = 'w-full rounded border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent';
+const REMOVE_FILE = 'ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-ink-2 hover:bg-danger-tint hover:text-danger';
 
 export default function KanbanAddCard({ columnId, isAdding, onAdd, onCancel }) {
   const [title, setTitle] = useState('');
@@ -86,39 +91,38 @@ export default function KanbanAddCard({ columnId, isAdding, onAdd, onCancel }) {
 
   if (!isAdding) {
     return (
-      <button
-        onClick={() => onCancel(columnId)}
-        className="w-full px-3 py-2 text-sm text-gray-500 hover:bg-gray-200 rounded-lg flex items-center space-x-1"
-      >
-        <Plus className="w-4 h-4" />
-        <span>Add a card</span>
-      </button>
+      <ClassroomButton variant="ghost" icon={Plus} onClick={() => onCancel(columnId)} className="w-full justify-start">
+        Add a card
+      </ClassroomButton>
     );
   }
 
   return (
-    <div className="space-y-2 bg-white rounded-lg border p-3">
+    <div className="space-y-2 rounded-lg border border-line bg-surface p-3">
       <input
         type="text"
+        aria-label="Card title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Card title (e.g., your name & student ID)..."
-        className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className={FIELD}
         autoFocus
       />
       <textarea
+        aria-label="Card description"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Description or comments..."
-        className="w-full px-3 py-2 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className={`${FIELD} resize-none`}
         rows={2}
       />
       <input
         type="text"
+        aria-label="Card link"
         value={linkUrl}
         onChange={(e) => setLinkUrl(e.target.value)}
         placeholder="Link URL (optional)..."
-        className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className={FIELD}
       />
       <div>
         <input
@@ -129,56 +133,55 @@ export default function KanbanAddCard({ columnId, isAdding, onAdd, onCancel }) {
           className="hidden"
           accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.rar,.jpg,.jpeg,.png,.gif"
         />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="flex items-center space-x-1 text-sm text-gray-500 hover:text-indigo-600 px-2 py-1 rounded hover:bg-gray-50"
-        >
-          <Paperclip className="w-4 h-4" />
-          <span>Add content</span>
-        </button>
+        <ClassroomButton variant="ghost" icon={Paperclip} onClick={() => fileInputRef.current?.click()}>
+          Add content
+        </ClassroomButton>
         {pendingFiles.length > 0 && (
-          <div className="mt-1 space-y-1">
+          <ul className="mt-1 space-y-1">
             {pendingFiles.map((pf, idx) => (
-              <div key={idx}>
+              <li key={idx}>
                 {/* Image preview thumbnail */}
                 {pf.previewUrl && (
                   <div className="mb-1">
                     <img
                       src={pf.previewUrl}
                       alt={pf.file.name}
-                      className="w-full max-h-24 object-cover rounded border"
+                      className="max-h-24 w-full rounded border border-line object-cover"
                     />
                   </div>
                 )}
-                <div className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded text-xs">
-                  <div className="flex items-center space-x-1 min-w-0">
-                    <FileText className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                <div className="flex items-center justify-between rounded bg-surface-hover px-2 py-1 text-xs text-ink">
+                  <div className="flex min-w-0 items-center gap-1">
+                    <FileText className="h-3 w-3 flex-shrink-0 text-ink-2" strokeWidth={1.5} aria-hidden="true" />
                     <span className="truncate">{pf.file.name}</span>
-                    <span className="text-gray-400 flex-shrink-0">({formatFileSize(pf.file.size)})</span>
+                    <span className="flex-shrink-0 text-ink-2">({formatFileSize(pf.file.size)})</span>
                   </div>
-                  <button onClick={() => removePendingFile(idx)} className="text-gray-400 hover:text-red-500 ml-1 flex-shrink-0">
-                    <X className="w-3 h-3" />
+                  <button
+                    type="button"
+                    onClick={() => removePendingFile(idx)}
+                    className={REMOVE_FILE}
+                    title="Remove file"
+                    aria-label={`Remove ${pf.file.name}`}
+                  >
+                    <X className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
                   </button>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
-      <div className="flex space-x-2">
-        <button
+      <div className="flex gap-2">
+        <ClassroomButton
+          variant="primary"
           onClick={handleSubmit}
           disabled={!title.trim() || uploading}
-          className="px-3 py-1.5 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
         >
-          {uploading ? <><Loader2 size={14} className="animate-spin" /> Uploading...</> : 'Add Card'}
-        </button>
-        <button
-          onClick={reset}
-          className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
-        >
+          {uploading ? <><Loader2 size={14} className="motion-safe:animate-spin" aria-hidden="true" /> Uploading...</> : 'Add Card'}
+        </ClassroomButton>
+        <ClassroomButton variant="ghost" onClick={reset}>
           Cancel
-        </button>
+        </ClassroomButton>
       </div>
     </div>
   );

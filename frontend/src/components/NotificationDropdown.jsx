@@ -2,16 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell, Check } from 'lucide-react';
 import { notificationsApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-
-const TYPE_COLORS = {
-  board_shared: 'bg-blue-500',
-  course_enrolled: 'bg-purple-500',
-  system_announcement: 'bg-gray-500',
-  invite_accepted: 'bg-teal-500',
-  file_deleted: 'bg-red-500',
-  quota_changed: 'bg-amber-500',
-  storage_warning: 'bg-orange-500',
-};
+import { ChalkBadge } from './classroom';
+import { getNotificationConfig } from '../utils/notificationTypes';
 
 function formatTimeAgo(dateString) {
   if (!dateString) return '';
@@ -82,29 +74,42 @@ function NotificationDropdown({ onNavigate }) {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
+        type="button"
         onClick={() => setShowDropdown(!showDropdown)}
-        className="hover:text-blue-200 transition relative p-1.5 flex items-center justify-center"
+        aria-haspopup="true"
+        aria-expanded={showDropdown}
+        className="relative flex h-11 w-11 items-center justify-center rounded text-ink-2 transition hover:bg-surface-hover md:h-8 md:w-8"
         aria-label="Notifications"
       >
-        <Bell className="w-5 h-5" />
+        <Bell className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+          <span className="absolute -top-1 -right-1 bg-danger text-white text-2xs rounded-full w-4 h-4 flex items-center justify-center">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
 
       {showDropdown && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border z-50 overflow-hidden animate-slideDown">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-            <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+        <div className="motion-safe:animate-oc-fade-in absolute right-0 z-50 mt-1 w-80 max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg border border-line bg-surface shadow-pop">
+          {/* Header: UI-font title and a chalk count, the only chalk accent in the menu */}
+          <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <h3 className="font-sans text-base font-semibold leading-tight text-ink">Notifications</h3>
+              {unreadCount > 0 && (
+                <ChalkBadge
+                  surface="chalk"
+                  icon={Bell}
+                  label={unreadCount > 9 ? '9+ unread' : `${unreadCount} unread`}
+                />
+              )}
+            </div>
             {unreadCount > 0 && (
               <button
+                type="button"
                 onClick={handleMarkAllRead}
-                className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center space-x-1"
+                className="inline-flex min-h-[44px] items-center gap-1 text-xs font-medium text-accent-700 hover:text-accent-800 md:min-h-[32px]"
               >
-                <Check className="w-3 h-3" />
+                <Check className="w-3 h-3" strokeWidth={1.5} aria-hidden="true" />
                 <span>Mark all read</span>
               </button>
             )}
@@ -113,39 +118,42 @@ function NotificationDropdown({ onNavigate }) {
           {/* Notification List */}
           <div className="max-h-80 overflow-y-auto">
             {recentNotifications.length > 0 ? (
-              recentNotifications.map(notification => (
-                <div
-                  key={notification.id}
-                  className={`px-4 py-3 border-b last:border-b-0 hover:bg-gray-50 transition ${
-                    !notification.is_read ? 'bg-blue-50' : ''
-                  }`}
-                >
-                  <div className="flex items-start space-x-3">
-                    <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${TYPE_COLORS[notification.type] || 'bg-gray-400'}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm ${!notification.is_read ? 'text-gray-900 font-medium' : 'text-gray-700'}`}>
+              recentNotifications.map(notification => {
+                const config = getNotificationConfig(notification.type);
+                const unread = !notification.is_read;
+                return (
+                  <div
+                    key={notification.id}
+                    className="flex items-start gap-3 border-b border-line px-3 py-3 last:border-b-0"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${config.dot}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      {unread && <span className="sr-only">Unread: </span>}
+                      <p className={`text-sm ${unread ? 'font-medium text-ink' : 'text-ink-2'}`}>
                         {notification.message}
                       </p>
-                      <p className="text-xs text-gray-400 mt-1">{formatTimeAgo(notification.created_at)}</p>
+                      <p className="mt-1 text-xs text-ink-2">{formatTimeAgo(notification.created_at)}</p>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
-              <div className="px-4 py-8 text-center text-sm text-gray-400">
-                No notifications yet
-              </div>
+              <p className="px-3 py-8 text-center text-sm text-ink-2">No notifications yet</p>
             )}
           </div>
 
           {/* Footer */}
-          <div className="px-4 py-3 border-t bg-gray-50">
+          <div className="border-t border-line">
             <button
+              type="button"
               onClick={() => {
                 setShowDropdown(false);
                 onNavigate(user?.role === 'lecturer' ? 'lecturer-notifications' : 'notifications');
               }}
-              className="w-full text-center text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+              className="flex min-h-[44px] w-full items-center justify-center text-sm font-medium text-accent-700 hover:bg-surface-hover hover:text-accent-800 md:min-h-[32px]"
             >
               View All Notifications
             </button>

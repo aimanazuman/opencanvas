@@ -1,13 +1,32 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Mail, Calendar, Edit2, Save, X, Clock, Folder, ArrowRight, Activity, User as UserIcon, HardDrive } from 'lucide-react';
+import { Mail, Calendar, Edit2, Save, Clock, Folder, ArrowRight, Activity, User as UserIcon, HardDrive, GraduationCap, BookOpen, Shield, AlertTriangle } from 'lucide-react';
 import Navigation from '../components/Navigation';
 import { useAuth } from '../contexts/AuthContext';
+import useStorageUsage from '../hooks/useStorageUsage';
 import { authApi, boardsApi } from '../services/api';
+import {
+  ClassroomShell, ChalkboardHeader, ChalkBadge, ClassroomAlert, ClassroomButton, ClassroomField, PaperPanel, StickyNote,
+} from '../components/classroom';
+import cx from '../components/classroom/cx';
+
+// Static lookup: role badge icon. Unknown roles fall back to the generic user icon.
+const ROLE_ICON = { student: GraduationCap, lecturer: BookOpen, admin: Shield };
+
+function ProfileDetail({ icon: Icon, label, children }) {
+  return (
+    <div>
+      <p className="flex items-center gap-1.5 text-xs text-ink-2">
+        <Icon className="h-4 w-4 flex-none" strokeWidth={1.5} aria-hidden="true" />
+        <span>{label}</span>
+      </p>
+      <div className="mt-1 break-words text-sm font-medium text-ink">{children}</div>
+    </div>
+  );
+}
 
 const ProfilePage = ({ onNavigate, hideNav = false }) => {
   const { user, refreshUser } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [profile, setProfile] = useState({
@@ -96,241 +115,250 @@ const ProfilePage = ({ onNavigate, hideNav = false }) => {
     ? new Date(user.date_joined).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
     : 'Unknown';
 
+  const RoleIcon = ROLE_ICON[profile.role] || UserIcon;
+
+  // Storage figures for the stats panel: effective quota from the usage endpoint (raw user figures if it fails).
+  const storage = useStorageUsage();
+  const hasQuota = storage.quota > 0;
+  const pct = Math.round(storage.percent);
+  const formatSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const k = 1024;
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    const value = bytes / Math.pow(k, i);
+    return `${value.toFixed(3).replace(/\.?0+$/, '')} ${units[i]}`;
+  };
+  const usedDisplay = formatSize(storage.used);
+  const quotaDisplay = formatSize(storage.quota);
+  const barColor = pct >= 90 ? 'bg-danger' : pct >= 80 ? 'bg-amber-500' : 'bg-accent-500';
+  const textColor = pct >= 90 ? 'text-danger' : pct >= 80 ? 'text-warning' : 'text-accent-600';
+
+  const Content = hideNav ? 'div' : 'main';
+
   return (
-    <div className={hideNav ? '' : 'min-h-screen bg-gray-50'}>
+    <ClassroomShell embedded={hideNav}>
       {!hideNav && <Navigation onNavigate={onNavigate} />}
-      <div className={hideNav ? '' : 'max-w-4xl mx-auto px-4 py-8'}>
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-          {/* Header Section */}
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 h-32"></div>
-          <div className="relative px-8 pb-8">
-            <div className="flex justify-between items-start -mt-16 mb-6">
-              <div className="flex items-end space-x-4">
-                <div className="w-32 h-32 bg-white rounded-full border-4 border-white shadow-lg flex items-center justify-center text-4xl font-bold text-gray-600">
-                  {initials}
-                </div>
-                <div className="pb-4">
-                  {isEditing ? (
-                    <div className="flex space-x-2 mb-1">
-                      <input
-                        type="text"
-                        value={profile.first_name}
-                        onChange={(e) => setProfile({...profile, first_name: e.target.value})}
-                        placeholder="First name"
-                        className="text-xl font-bold border border-gray-300 rounded px-2 py-1 w-36"
-                      />
-                      <input
-                        type="text"
-                        value={profile.last_name}
-                        onChange={(e) => setProfile({...profile, last_name: e.target.value})}
-                        placeholder="Last name"
-                        className="text-xl font-bold border border-gray-300 rounded px-2 py-1 w-36"
-                      />
-                    </div>
-                  ) : (
-                    <h1 className="text-3xl font-bold text-gray-900">{displayName}</h1>
-                  )}
-                  <p className="text-gray-600 capitalize">{profile.role}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-                disabled={saving}
-                className={`mt-4 px-4 py-2 rounded-lg font-semibold transition flex items-center space-x-2 ${
-                  isEditing
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-                }`}
+      <Content
+        aria-labelledby="profile-title"
+        className={hideNav ? 'space-y-6' : 'mx-auto max-w-4xl space-y-6 px-4 py-8'}
+      >
+        <ChalkboardHeader size="banner" titleId="profile-title" title="Profile" />
+
+        {/* ID card: avatar, name, role and institution. Flat, no tilt. */}
+        <PaperPanel tone="white" padded={false} className="overflow-hidden">
+          <div className="flex flex-col gap-4 p-4 md:flex-row md:items-start md:justify-between md:p-6">
+            <div className="flex min-w-0 items-center gap-4">
+              <span
+                aria-hidden="true"
+                className="flex h-16 w-16 flex-none items-center justify-center rounded-full bg-line text-xl font-semibold text-ink"
               >
-                {isEditing ? <Save className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-                <span>{isEditing ? (saving ? 'Saving...' : 'Save') : 'Edit Profile'}</span>
-              </button>
-            </div>
-
-            {/* Profile Information */}
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="flex items-center space-x-3">
-                  <Mail className="w-5 h-5 text-gray-400" />
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600">Email</p>
-                    {isEditing ? (
-                      <div>
-                        <input
-                          type="email"
-                          value={profile.email}
-                          onChange={(e) => setProfile({...profile, email: e.target.value})}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                        />
-                        {user?.email_change_info && (
-                          <p className="text-xs text-gray-400 mt-1">
-                            {user.email_change_info.changes_used}/{user.email_change_info.max_changes} changes used
-                            {user.email_change_info.days_remaining > 0 && ` | ${user.email_change_info.days_remaining} days until next change`}
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="font-medium">{profile.email}</p>
-                    )}
+                {initials}
+              </span>
+              <div className="min-w-0">
+                {isEditing ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <ClassroomField
+                      id="profile-first-name"
+                      label="First name"
+                      value={profile.first_name}
+                      onChange={(e) => setProfile({...profile, first_name: e.target.value})}
+                      placeholder="First name"
+                    />
+                    <ClassroomField
+                      id="profile-last-name"
+                      label="Last name"
+                      value={profile.last_name}
+                      onChange={(e) => setProfile({...profile, last_name: e.target.value})}
+                      placeholder="Last name"
+                    />
                   </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <UserIcon className="w-5 h-5 text-gray-400" />
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600">Username</p>
-                    {isEditing ? (
-                      <div>
-                        <input
-                          type="text"
-                          value={profile.username}
-                          onChange={(e) => setProfile({...profile, username: e.target.value})}
-                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                        />
-                        {user?.username_change_info && (
-                          <p className="text-xs text-gray-400 mt-1">
-                            {user.username_change_info.changes_used}/{user.username_change_info.max_changes} changes used
-                            {user.username_change_info.days_remaining > 0 && ` | ${user.username_change_info.days_remaining} days until next change`}
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="font-medium">@{profile.username}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div className="flex items-start space-x-3">
-                  <Activity className="w-5 h-5 text-gray-400 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600">Bio</p>
-                    {isEditing ? (
-                      <textarea
-                        value={profile.bio}
-                        onChange={(e) => setProfile({...profile, bio: e.target.value})}
-                        placeholder="Tell us about yourself..."
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                        rows={2}
-                      />
-                    ) : (
-                      <p className="font-medium">{profile.bio || 'No bio yet'}</p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <Calendar className="w-5 h-5 text-gray-400" />
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600">Joined</p>
-                    <p className="font-medium">{joinDate}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {isEditing && (
-              <div className="mt-4 space-y-2">
-                {saveError && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                    {saveError}
-                  </div>
+                ) : (
+                  <h2 className="truncate text-lg font-semibold text-ink">{displayName}</h2>
                 )}
-                <button
-                  onClick={() => { setIsEditing(false); setSaveError(null); }}
-                  className="text-sm text-gray-500 hover:text-gray-700"
-                >
-                  Cancel editing
-                </button>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {profile.role && (
+                    <ChalkBadge label={profile.role} icon={RoleIcon} className="capitalize" />
+                  )}
+                  {user?.institution_name && (
+                    <span className="text-xs text-ink-2">{user.institution_name}</span>
+                  )}
+                </div>
               </div>
-            )}
+            </div>
+            <ClassroomButton
+              variant={isEditing ? 'primary' : 'secondary'}
+              icon={isEditing ? Save : Edit2}
+              disabled={saving}
+              onClick={() => (isEditing ? handleSave() : setIsEditing(true))}
+              className="self-start"
+            >
+              {isEditing ? (saving ? 'Saving...' : 'Save') : 'Edit Profile'}
+            </ClassroomButton>
           </div>
-        </div>
+
+          <div className="grid gap-5 border-t border-line p-4 md:grid-cols-2 md:p-6">
+            <div className="space-y-4">
+              {isEditing ? (
+                <ClassroomField
+                  id="profile-email"
+                  label="Email"
+                  type="email"
+                  value={profile.email}
+                  onChange={(e) => setProfile({...profile, email: e.target.value})}
+                  hint={user?.email_change_info
+                    ? `${user.email_change_info.changes_used}/${user.email_change_info.max_changes} changes used${user.email_change_info.days_remaining > 0 ? ` | ${user.email_change_info.days_remaining} days until next change` : ''}`
+                    : undefined}
+                />
+              ) : (
+                <ProfileDetail icon={Mail} label="Email">{profile.email}</ProfileDetail>
+              )}
+
+              {isEditing ? (
+                <ClassroomField
+                  id="profile-username"
+                  label="Username"
+                  value={profile.username}
+                  onChange={(e) => setProfile({...profile, username: e.target.value})}
+                  hint={user?.username_change_info
+                    ? `${user.username_change_info.changes_used}/${user.username_change_info.max_changes} changes used${user.username_change_info.days_remaining > 0 ? ` | ${user.username_change_info.days_remaining} days until next change` : ''}`
+                    : undefined}
+                />
+              ) : (
+                <ProfileDetail icon={UserIcon} label="Username">@{profile.username}</ProfileDetail>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              {isEditing ? (
+                <ClassroomField
+                  id="profile-bio"
+                  as="textarea"
+                  label="Bio"
+                  value={profile.bio}
+                  onChange={(e) => setProfile({...profile, bio: e.target.value})}
+                  placeholder="Tell us about yourself..."
+                  rows={2}
+                />
+              ) : (
+                <ProfileDetail icon={Activity} label="Bio">{profile.bio || 'No bio yet'}</ProfileDetail>
+              )}
+
+              <ProfileDetail icon={Calendar} label="Joined">{joinDate}</ProfileDetail>
+            </div>
+          </div>
+
+          {isEditing && (
+            <div className="space-y-3 border-t border-line p-4 md:px-6">
+              {saveError && <ClassroomAlert>{saveError}</ClassroomAlert>}
+              <ClassroomButton variant="ghost" onClick={() => { setIsEditing(false); setSaveError(null); }}>
+                Cancel editing
+              </ClassroomButton>
+            </div>
+          )}
+        </PaperPanel>
 
         {/* Statistics */}
-        {(() => {
-          const usedBytes = user?.storage_used || 0;
-          const quotaBytes = user?.storage_quota || 5368709120;
-          const formatSize = (bytes) => {
-            if (!bytes || bytes === 0) return '0 B';
-            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-            const k = 1024;
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            const value = bytes / Math.pow(k, i);
-            return `${value.toFixed(3).replace(/\.?0+$/, '')} ${units[i]}`;
-          };
-          const usedDisplay = formatSize(usedBytes);
-          const quotaDisplay = formatSize(quotaBytes);
-          const pct = quotaBytes > 0 ? Math.round((usedBytes / quotaBytes) * 100) : 0;
-          const barColor = pct >= 90 ? 'bg-red-500' : pct >= 80 ? 'bg-yellow-500' : 'bg-blue-500';
-          const textColor = pct >= 90 ? 'text-red-600' : pct >= 80 ? 'text-yellow-600' : 'text-blue-600';
-          return (
-            <div className="grid md:grid-cols-2 gap-6 mt-8">
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <p className="text-gray-600 mb-2">Active Boards</p>
-                <p className="text-3xl font-bold text-blue-600">{boardCount}</p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <PaperPanel tone="white" className="p-4 md:p-6">
+            <p className="text-sm text-ink-2">Active Boards</p>
+            <p className="mt-2 text-3xl font-semibold text-accent-600">{boardCount}</p>
+          </PaperPanel>
+
+          <PaperPanel tone="white" className="p-4 md:p-6">
+            <p className="flex items-center gap-1.5 text-sm text-ink-2">
+              <HardDrive className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+              <span>Storage</span>
+            </p>
+            {storage.status === 'loading' ? (
+              <div className="mt-2 space-y-3" aria-busy="true">
+                <span className="sr-only">Loading storage usage</span>
+                <div className="skeleton h-6 w-1/2" />
+                <div className="skeleton h-2 w-full" />
               </div>
-              <div className="bg-white rounded-xl shadow-md p-6">
-                <div className="flex items-center space-x-2 mb-3">
-                  <HardDrive className="w-5 h-5 text-gray-400" />
-                  <p className="text-gray-600">Storage</p>
+            ) : hasQuota ? (
+              <>
+                <div className="mt-2 flex items-end justify-between gap-3">
+                  <p className="text-xl font-semibold text-ink">
+                    {usedDisplay} <span className="text-sm font-normal text-ink-2">/ {quotaDisplay}</span>
+                  </p>
+                  <span className={cx('text-base font-semibold', textColor)}>{pct}%</span>
                 </div>
-                <div className="flex items-end justify-between mb-2">
-                  <p className="text-2xl font-bold text-gray-900">{usedDisplay} <span className="text-base font-normal text-gray-500">/ {quotaDisplay}</span></p>
-                  <span className={`text-lg font-bold ${textColor}`}>{pct}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div className={`h-3 rounded-full ${barColor} transition-all`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                <div
+                  role="progressbar"
+                  aria-label="Storage used"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.min(pct, 100)}
+                  className="mt-2 h-2 w-full rounded-sm bg-line"
+                >
+                  <div className={cx('h-2 rounded-sm', barColor)} style={{ width: `${Math.min(pct, 100)}%` }} />
                 </div>
                 {pct >= 80 && (
-                  <p className={`text-sm mt-2 ${pct >= 90 ? 'text-red-600' : 'text-yellow-600'}`}>
-                    {pct >= 90 ? 'Storage almost full! Consider freeing up space.' : 'Storage getting full. Consider cleaning up files.'}
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <ChalkBadge
+                      tone={pct >= 90 ? 'danger' : 'warning'}
+                      icon={AlertTriangle}
+                      label={pct >= 90 ? 'Almost full' : 'Getting full'}
+                    />
+                    <p className="text-sm text-ink-2">
+                      {pct >= 90 ? 'Storage almost full! Consider freeing up space.' : 'Storage getting full. Consider cleaning up files.'}
+                    </p>
+                  </div>
                 )}
-              </div>
-            </div>
-          );
-        })()}
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-ink-2">Used {usedDisplay}. No storage quota is set for this account.</p>
+            )}
+          </PaperPanel>
+        </div>
 
         {/* Recent Boards */}
-        <div className="mt-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Boards</h3>
-            <button
-              onClick={() => onNavigate('dashboard')}
-              className="text-blue-600 hover:text-blue-700 text-sm flex items-center space-x-1"
-            >
+        <PaperPanel tone="white" padded={false} className="overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2">
+            <h2 id="profile-recent-title" className="text-base font-semibold text-ink">Recent Boards</h2>
+            <ClassroomButton variant="ghost" onClick={() => onNavigate('dashboard')}>
               <span>View All</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+              <ArrowRight className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+            </ClassroomButton>
           </div>
-          <div className="space-y-3">
-            {recentBoards.map(board => (
-              <div
-                key={board.id}
-                onClick={() => onNavigate('workspace', { boardId: board.id })}
-                className="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition cursor-pointer flex items-center justify-between"
-              >
-                <div className="flex items-center space-x-4">
-                  <div className="bg-gradient-to-br from-blue-100 to-purple-100 p-3 rounded-lg">
-                    <Folder className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-gray-900">{board.name}</h4>
-                    <p className="text-sm text-gray-500">{board.course}</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2 text-gray-400">
-                  <Clock className="w-4 h-4" />
-                  <span className="text-sm">{board.lastEdited}</span>
-                </div>
-              </div>
-            ))}
-            {recentBoards.length === 0 && (
-              <p className="text-center text-gray-400 py-8">No boards yet</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+          {recentBoards.length > 0 ? (
+            <ul>
+              {recentBoards.map(board => (
+                <li key={board.id} className="border-b border-line last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('workspace', { boardId: board.id })}
+                    className="flex min-h-[44px] w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-surface-hover"
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-9 w-9 flex-none items-center justify-center rounded bg-accent-50">
+                        <Folder className="h-4 w-4 text-accent-600" strokeWidth={1.5} aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-ink">{board.name}</span>
+                        <span className="block truncate text-xs text-ink-2">{board.course}</span>
+                      </span>
+                    </span>
+                    <span className="flex flex-none items-center gap-1.5 text-xs text-ink-2">
+                      <Clock className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                      <span>{board.lastEdited}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-4">
+              <StickyNote color="azure">
+                <p className="text-sm font-semibold text-ink">No boards yet</p>
+                <p className="mt-1 text-xs text-ink-2">Boards you create or join show here.</p>
+              </StickyNote>
+            </div>
+          )}
+        </PaperPanel>
+      </Content>
+    </ClassroomShell>
   );
 };
 

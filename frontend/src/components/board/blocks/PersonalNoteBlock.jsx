@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
 import { Lock, Trash2, StickyNote } from 'lucide-react';
+import { ChalkBadge, ClassroomButton } from '../../classroom';
+
+// 44 px on phones, 32 px on desktop.
+const ICON_BTN = 'btn-motion flex h-11 w-11 flex-none items-center justify-center rounded text-ink-2 hover:bg-surface-hover hover:text-danger md:h-8 md:w-8';
 
 export default function PersonalNoteBlock({ block, canEdit, onUpdate, onDelete, currentUserId }) {
   const [editing, setEditing] = useState(false);
@@ -15,55 +19,54 @@ export default function PersonalNoteBlock({ block, canEdit, onUpdate, onDelete, 
     setEditing(false);
   };
 
+  const text = block.content || (canEdit ? 'Click to add a personal note...' : 'Empty note');
+
   return (
-    <div className="border border-amber-300 rounded-lg p-4 bg-amber-50">
+    <div className="rounded-lg border border-line bg-surface p-4">
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <StickyNote size={16} className="text-amber-600" />
-          <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Personal Note</span>
-          <Lock size={12} className="text-amber-500" />
-        </div>
+        <ChalkBadge icon={StickyNote} label="Personal Note" />
         {canEdit && (
-          <button onClick={onDelete} className="text-gray-400 hover:text-red-500" title="Remove">
-            <Trash2 size={16} />
+          <button type="button" onClick={onDelete} className={ICON_BTN} title="Remove" aria-label="Remove">
+            <Trash2 size={16} strokeWidth={1.5} aria-hidden="true" />
           </button>
         )}
       </div>
       {editing ? (
         <div>
           <textarea
+            aria-label="Personal note"
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            className="w-full p-2 border border-amber-300 rounded text-sm bg-white resize-none"
+            className="w-full resize-none rounded border border-line-strong bg-surface p-2 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             rows={4}
             placeholder="Write your personal note..."
             autoFocus
           />
           <div className="flex gap-2 mt-2">
-            <button
-              onClick={handleSave}
-              className="px-3 py-1 bg-amber-500 text-white rounded text-sm hover:bg-amber-600"
-            >
+            <ClassroomButton variant="primary" onClick={handleSave}>
               Save
-            </button>
-            <button
+            </ClassroomButton>
+            <ClassroomButton
+              variant="ghost"
               onClick={() => { setContent(block.content || ''); setEditing(false); }}
-              className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300"
             >
               Cancel
-            </button>
+            </ClassroomButton>
           </div>
         </div>
-      ) : (
-        <div
-          onClick={() => canEdit && setEditing(true)}
-          className={`text-sm text-amber-900 whitespace-pre-wrap ${canEdit ? 'cursor-pointer hover:bg-amber-100 rounded p-1 -m-1' : ''}`}
+      ) : canEdit ? (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="btn-motion -m-1 block w-full whitespace-pre-wrap rounded p-1 text-left text-sm text-ink hover:bg-surface-hover"
         >
-          {block.content || (canEdit ? 'Click to add a personal note...' : 'Empty note')}
-        </div>
+          {text}
+        </button>
+      ) : (
+        <div className="whitespace-pre-wrap text-sm text-ink">{text}</div>
       )}
-      <p className="text-xs text-amber-500 mt-2 flex items-center gap-1">
-        <Lock size={10} />
+      <p className="text-xs text-ink-2 mt-2 flex items-center gap-1">
+        <Lock size={12} strokeWidth={1.5} aria-hidden="true" />
         Only visible to you
       </p>
     </div>

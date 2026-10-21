@@ -2,6 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ImageIcon, Trash2, Upload, Loader2 } from 'lucide-react';
 import { uploadFile } from '../../../utils/fileUpload';
 import { useMediaUrl } from '../../../utils/media';
+import { ClassroomButton } from '../../classroom';
+
+const PLACEHOLDER = 'block w-full rounded-lg border-2 border-dashed border-line-strong bg-surface p-8 text-center';
+const PLACEHOLDER_EDIT = `${PLACEHOLDER} btn-motion hover:bg-surface-hover`;
+const ICON_BTN = 'btn-motion flex h-11 w-11 items-center justify-center rounded bg-surface border border-line text-ink-2 hover:bg-surface-hover md:h-8 md:w-8';
 
 export default function ImageBlock({ block, canEdit, onUpdate, onDelete }) {
   const [caption, setCaption] = useState(block.caption || '');
@@ -49,31 +54,45 @@ export default function ImageBlock({ block, canEdit, onUpdate, onDelete }) {
 
   if (block.src && !resolvedSrc) {
     return (
-      <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center text-sm text-gray-400">
+      <div className="rounded-lg border-2 border-dashed border-line-strong bg-surface p-8 text-center text-sm text-ink-2">
         {resolvedSrc === undefined ? 'Loading image...' : 'This image is not available.'}
         {canEdit && (
-          <button onClick={onDelete} className="ml-3 text-red-400 hover:underline" title="Remove block">Remove</button>
+          <ClassroomButton variant="ghost" onClick={onDelete} title="Remove block" aria-label="Remove block" className="ml-3">
+            Remove
+          </ClassroomButton>
         )}
       </div>
     );
   }
 
   if (!displaySrc) {
+    const body = (
+      <>
+        <ImageIcon className="mx-auto mb-2 h-10 w-10 text-ink-3" strokeWidth={1.5} aria-hidden="true" />
+        <span className="block text-sm text-ink-2">{canEdit ? 'Click to upload an image' : 'No image uploaded'}</span>
+        {block.caption && <span className="mt-1 block text-xs text-ink-2">{block.caption}</span>}
+      </>
+    );
     return (
       <div className="group relative">
-        <div
-          className={`border-2 border-dashed border-gray-300 rounded-lg p-8 text-center ${canEdit ? 'cursor-pointer hover:border-indigo-400 hover:bg-indigo-50' : ''}`}
-          onClick={() => canEdit && fileInputRef.current?.click()}
-        >
-          <ImageIcon className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-500">{canEdit ? 'Click to upload an image' : 'No image uploaded'}</p>
-          {block.caption && <p className="text-xs text-gray-400 mt-1">{block.caption}</p>}
-        </div>
+        {canEdit ? (
+          <button type="button" className={PLACEHOLDER_EDIT} onClick={() => fileInputRef.current?.click()}>
+            {body}
+          </button>
+        ) : (
+          <div className={PLACEHOLDER}>{body}</div>
+        )}
         {canEdit && (
           <>
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
-            <button onClick={onDelete} className="absolute top-2 right-2 p-1 bg-white border rounded shadow-sm hover:bg-red-50 opacity-0 group-hover:opacity-100 transition">
-              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+            <input ref={fileInputRef} type="file" accept="image/*" aria-label="Upload image" onChange={handleFileSelect} className="hidden" />
+            <button
+              type="button"
+              onClick={onDelete}
+              title="Delete"
+              aria-label="Delete"
+              className={`${ICON_BTN} absolute top-2 right-2 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 hover:text-danger`}
+            >
+              <Trash2 className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
             </button>
           </>
         )}
@@ -83,35 +102,37 @@ export default function ImageBlock({ block, canEdit, onUpdate, onDelete }) {
 
   return (
     <div className="group relative">
-      <img src={displaySrc} alt={block.caption || 'Image'} className="w-full rounded-lg" />
+      <img src={displaySrc} alt={block.caption || 'Image'} loading="lazy" decoding="async" className="w-full rounded-lg" />
       {uploading && (
-        <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center rounded-lg">
-          <div className="bg-white rounded-full p-2 shadow-lg">
-            <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+        <div className="absolute inset-0 bg-[var(--scrim)] flex items-center justify-center rounded-lg">
+          <div className="bg-surface rounded-full p-2 shadow-pop">
+            <Loader2 className="w-6 h-6 text-accent motion-safe:animate-spin" aria-hidden="true" />
+            <span className="sr-only">Uploading image</span>
           </div>
         </div>
       )}
       {canEdit ? (
         <input
           type="text"
+          aria-label="Image caption"
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
           onBlur={handleCaptionBlur}
           placeholder="Add a caption..."
-          className="w-full mt-2 text-sm text-gray-500 border-none focus:outline-none focus:ring-1 focus:ring-indigo-300 rounded px-1"
+          className="w-full mt-2 text-sm text-ink placeholder:text-ink-3 border-none bg-transparent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded px-1"
         />
       ) : (
-        block.caption && <p className="text-sm text-gray-500 mt-2">{block.caption}</p>
+        block.caption && <p className="text-sm text-ink-2 mt-2">{block.caption}</p>
       )}
       {canEdit && (
-        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition flex space-x-1">
-          <button onClick={() => !uploading && fileInputRef.current?.click()} className="p-1 bg-white border rounded shadow-sm hover:bg-gray-50" title="Replace">
-            <Upload className="w-3.5 h-3.5 text-gray-500" />
+        <div className="absolute top-2 right-2 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 flex gap-1">
+          <button type="button" onClick={() => !uploading && fileInputRef.current?.click()} className={ICON_BTN} title="Replace" aria-label="Replace">
+            <Upload className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
           </button>
-          <button onClick={onDelete} className="p-1 bg-white border rounded shadow-sm hover:bg-red-50" title="Delete">
-            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+          <button type="button" onClick={onDelete} className={`${ICON_BTN} hover:text-danger`} title="Delete" aria-label="Delete">
+            <Trash2 className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
           </button>
-          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" disabled={uploading} />
+          <input ref={fileInputRef} type="file" accept="image/*" aria-label="Replace image" onChange={handleFileSelect} className="hidden" disabled={uploading} />
         </div>
       )}
     </div>

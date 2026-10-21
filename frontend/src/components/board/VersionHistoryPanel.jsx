@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Clock, RotateCcw, Loader2, AlertTriangle, ChevronDown, ChevronRight, Plus, Minus, Edit3 } from 'lucide-react';
+import { X, Clock, RotateCcw, ChevronDown, ChevronRight, Plus, Minus, Edit3, Check } from 'lucide-react';
 import { boardsApi } from '../../services/api';
+import { ClassroomDialog, ClassroomButton, ChalkBadge } from '../classroom';
 
 // Compare two version content objects and generate a human-readable change summary
 function computeChanges(olderContent, newerContent) {
@@ -138,6 +139,7 @@ function computeChanges(olderContent, newerContent) {
   return changes;
 }
 
+// Static lookup maps. A change is shown by its icon and a screen-reader word, never by colour alone.
 const CHANGE_ICONS = {
   added: Plus,
   removed: Minus,
@@ -145,31 +147,50 @@ const CHANGE_ICONS = {
 };
 
 const CHANGE_COLORS = {
-  added: 'text-green-600 bg-green-50',
-  removed: 'text-red-600 bg-red-50',
-  modified: 'text-blue-600 bg-blue-50',
+  added: 'text-success bg-success-tint',
+  removed: 'text-danger bg-danger-tint',
+  modified: 'text-accent bg-accent-tint',
+};
+
+const CHANGE_WORDS = {
+  added: 'Added',
+  removed: 'Removed',
+  modified: 'Changed',
 };
 
 function ChangesList({ changes }) {
   if (!changes || changes.length === 0) return null;
 
   return (
-    <div className="mt-2 space-y-1">
+    <ul className="mt-2 space-y-1">
       {changes.map((change, i) => {
         const Icon = CHANGE_ICONS[change.type] || Edit3;
-        const colorClass = CHANGE_COLORS[change.type] || 'text-gray-600 bg-gray-50';
+        const colorClass = CHANGE_COLORS[change.type] || 'text-ink-2 bg-surface-hover';
         return (
-          <div key={i} className="flex items-start space-x-1.5 text-xs">
-            <span className={`inline-flex items-center justify-center w-4 h-4 rounded flex-shrink-0 mt-0.5 ${colorClass}`}>
-              <Icon className="w-2.5 h-2.5" />
+          <li key={i} className="flex items-start gap-1.5 text-xs">
+            <span className={`mt-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-sm ${colorClass}`}>
+              <Icon className="h-2.5 w-2.5" strokeWidth={1.5} aria-hidden="true" />
             </span>
-            <span className="text-gray-600">
-              <span className="font-medium text-gray-700">{change.category}:</span>{' '}
+            <span className="min-w-0 text-ink-2">
+              <span className="sr-only">{CHANGE_WORDS[change.type] || 'Changed'}: </span>
+              <span className="font-medium text-ink">{change.category}:</span>{' '}
               <span className="line-clamp-2">{change.detail}</span>
             </span>
-          </div>
+          </li>
         );
       })}
+    </ul>
+  );
+}
+
+// Loading placeholder: static neutral blocks, no pulse loop.
+function VersionSkeleton() {
+  return (
+    <div role="status" className="space-y-2 p-4">
+      <span className="sr-only">Loading versions</span>
+      {[0, 1, 2].map((i) => (
+        <div key={i} aria-hidden="true" className="h-14 rounded border border-line bg-surface-hover" />
+      ))}
     </div>
   );
 }
@@ -227,145 +248,154 @@ export default function VersionHistoryPanel({ isOpen, onClose, boardId, onRestor
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl z-40 flex flex-col animate-slideRight border-l">
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-        <div className="flex items-center space-x-2">
-          <Clock className="w-5 h-5 text-indigo-600" />
-          <h3 className="font-semibold text-gray-900">Version History</h3>
+    <>
+      <section
+        aria-labelledby="version-history-title"
+        className="motion-safe:animate-oc-fade-in fixed inset-x-0 bottom-0 z-40 flex max-h-[80vh] flex-col rounded-t-xl border border-line bg-surface shadow-pop md:inset-x-auto md:bottom-auto md:right-2 md:top-12 md:max-h-[calc(100vh-56px)] md:w-80 md:rounded-lg"
+      >
+        {/* Mobile bottom sheet handle (decorative) */}
+        <div aria-hidden="true" className="mx-auto mt-2 h-1 w-8 rounded-sm bg-line-strong md:hidden" />
+
+        <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Clock className="h-4 w-4 flex-shrink-0 text-accent" strokeWidth={1.5} aria-hidden="true" />
+            <h3 id="version-history-title" className="text-xs font-semibold text-ink">Version History</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-motion flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-ink-2 hover:bg-surface-hover md:h-7 md:w-7"
+            aria-label="Close version history"
+          >
+            <X className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 hover:bg-gray-200 rounded-lg transition"
-          aria-label="Close version history"
-        >
-          <X className="w-5 h-5" />
-        </button>
-      </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-          </div>
-        ) : versions.length === 0 ? (
-          <div className="text-center py-12 px-4">
-            <Clock className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 text-sm">No version history yet</p>
-            <p className="text-gray-400 text-xs mt-1">Versions are created when you save changes</p>
-          </div>
-        ) : (
-          <div className="divide-y">
-            {versions.map((version, idx) => {
-              const date = new Date(version.created_at);
-              const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-              const changes = versionChanges[version.id] || [];
-              const hasChanges = changes.length > 0;
-              const isExpanded = expandedVersions[version.id];
-              const isLatest = idx === 0;
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {loading ? (
+            <VersionSkeleton />
+          ) : versions.length === 0 ? (
+            <div className="px-4 py-12 text-center">
+              <Clock className="mx-auto mb-3 h-5 w-5 text-ink-3" strokeWidth={1.5} aria-hidden="true" />
+              <p className="text-sm font-medium text-ink">No version history yet</p>
+              <p className="mt-1 text-xs text-ink-2">Versions are created when you save changes</p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-line">
+              {versions.map((version, idx) => {
+                const date = new Date(version.created_at);
+                const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+                const changes = versionChanges[version.id] || [];
+                const hasChanges = changes.length > 0;
+                const isExpanded = expandedVersions[version.id];
+                const isLatest = idx === 0;
+                const addedCount = changes.filter(c => c.type === 'added').length;
+                const removedCount = changes.filter(c => c.type === 'removed').length;
+                const modifiedCount = changes.filter(c => c.type === 'modified').length;
 
-              return (
-                <div key={version.id} className="px-4 py-3 hover:bg-gray-50 transition group">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <p className="text-sm font-medium text-gray-900">
-                          Version {version.version_number}
+                return (
+                  <li key={version.id} className="group px-4 py-3 hover:bg-surface-hover">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-medium text-ink">
+                            Version {version.version_number}
+                          </p>
+                          {isLatest && <ChalkBadge tone="success" icon={Check} label="Latest" />}
+                        </div>
+                        <p className="mt-0.5 text-xs text-ink-2">
+                          {dateStr} at {timeStr}
                         </p>
-                        {isLatest && (
-                          <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full">Latest</span>
+                        {version.created_by_name && (
+                          <p className="mt-0.5 text-xs text-ink-3">
+                            by {version.created_by_name}
+                          </p>
+                        )}
+                        {version.description && (
+                          <p className="mt-1 truncate text-xs text-ink-2">
+                            {version.description}
+                          </p>
+                        )}
+
+                        {/* Change summary */}
+                        {hasChanges && (
+                          <div className="mt-1.5">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpanded(version.id)}
+                              aria-expanded={Boolean(isExpanded)}
+                              className="btn-motion flex min-h-[44px] items-center gap-1 text-xs font-medium text-accent hover:text-accent-hover md:min-h-0"
+                            >
+                              {isExpanded
+                                ? <ChevronDown className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+                                : <ChevronRight className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />}
+                              <span>
+                                {changes.length} change{changes.length !== 1 ? 's' : ''}
+                                {!isExpanded && (
+                                  <span className="ml-1 text-ink-2">
+                                    ({addedCount > 0 ? `+${addedCount}` : ''}
+                                    {removedCount > 0 && <> -{removedCount}</>}
+                                    {modifiedCount > 0 && <> ~{modifiedCount}</>})
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                            {isExpanded && <ChangesList changes={changes} />}
+                          </div>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {dateStr} at {timeStr}
-                      </p>
-                      {version.created_by_name && (
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          by {version.created_by_name}
-                        </p>
-                      )}
-                      {version.description && (
-                        <p className="text-xs text-gray-600 mt-1 truncate">
-                          {version.description}
-                        </p>
-                      )}
-
-                      {/* Change summary badges */}
-                      {hasChanges && (
-                        <div className="mt-1.5">
-                          <button
-                            onClick={() => toggleExpanded(version.id)}
-                            className="flex items-center space-x-1 text-xs text-indigo-600 hover:text-indigo-800 transition"
-                          >
-                            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                            <span>
-                              {changes.length} change{changes.length !== 1 ? 's' : ''}
-                              {!isExpanded && (
-                                <span className="text-gray-400 ml-1">
-                                  ({changes.filter(c => c.type === 'added').length > 0 ? `+${changes.filter(c => c.type === 'added').length}` : ''}
-                                  {changes.filter(c => c.type === 'removed').length > 0 ? ` -${changes.filter(c => c.type === 'removed').length}` : ''}
-                                  {changes.filter(c => c.type === 'modified').length > 0 ? ` ~${changes.filter(c => c.type === 'modified').length}` : ''})
-                                </span>
-                              )}
-                            </span>
-                          </button>
-                          {isExpanded && <ChangesList changes={changes} />}
-                        </div>
+                      {!isLatest && (
+                        // Always visible on touch (no hover there); on desktop it appears on hover or keyboard focus.
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRestore(version)}
+                          className="btn-motion flex h-11 w-11 flex-shrink-0 items-center justify-center rounded text-accent opacity-100 hover:bg-accent-tint md:h-8 md:w-8 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100"
+                          title="Restore this version"
+                          aria-label="Restore this version"
+                        >
+                          <RotateCcw className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                        </button>
                       )}
                     </div>
-                    {!isLatest && (
-                      <button
-                        onClick={() => setConfirmRestore(version)}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition flex-shrink-0"
-                        title="Restore this version"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Restore confirmation dialog */}
-      {confirmRestore && (
-        <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-xs animate-scaleIn">
-            <div className="flex items-center space-x-2 mb-3">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
-              <h4 className="font-semibold text-gray-900">Restore Version?</h4>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
-              This will restore your board to Version {confirmRestore.version_number}. A snapshot of the current state will be saved first.
-            </p>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setConfirmRestore(null)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleRestore(confirmRestore)}
-                disabled={restoring}
-                className="flex-1 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition flex items-center justify-center space-x-1"
-              >
-                {restoring ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Restore</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
+      </section>
+
+      {/* Restore confirmation: a dialog of its own, outside the panel so its fixed overlay is not clipped. */}
+      {confirmRestore && (
+        <ClassroomDialog
+          titleId="restore-version-title"
+          title="Restore Version?"
+          onClose={() => setConfirmRestore(null)}
+          size="md"
+          footer={(
+            <>
+              <ClassroomButton variant="secondary" className="w-full sm:w-auto" onClick={() => setConfirmRestore(null)}>
+                Cancel
+              </ClassroomButton>
+              <ClassroomButton
+                variant="primary"
+                className="w-full sm:w-auto"
+                icon={RotateCcw}
+                loading={Boolean(restoring)}
+                disabled={Boolean(restoring)}
+                onClick={() => handleRestore(confirmRestore)}
+              >
+                Restore
+              </ClassroomButton>
+            </>
+          )}
+        >
+          <p className="text-sm text-ink-2">
+            This will restore your board to Version {confirmRestore.version_number}. A snapshot of the current state will be saved first.
+          </p>
+        </ClassroomDialog>
       )}
-    </div>
+    </>
   );
 }

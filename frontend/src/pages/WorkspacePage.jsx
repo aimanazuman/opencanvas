@@ -17,7 +17,11 @@ import KanbanBoard from '../components/board/KanbanBoard';
 import QuizBoard from '../components/board/QuizBoard';
 import InteractionPanel from '../components/board/InteractionPanel';
 import VersionHistoryPanel from '../components/board/VersionHistoryPanel';
-import { AlertTriangle } from 'lucide-react';
+import { ClassroomShell, ClassroomDialog, ClassroomButton } from '../components/classroom';
+import cx from '../components/classroom/cx';
+
+// Canvas: wall colour with the 16 px dot grid (--canvas-dot). Static class string, so Tailwind sees it.
+const CANVAS = 'bg-wall bg-[image:radial-gradient(var(--canvas-dot)_1px,transparent_1px)] bg-[length:16px_16px]';
 
 function WorkspaceContent({ onNavigate }) {
   const location = useLocation();
@@ -190,11 +194,18 @@ function WorkspaceContent({ onNavigate }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo, handleSave]);
 
+  // Skeleton of the header and canvas while the board loads. Announced once through the status region.
   if (!board) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600" />
-      </div>
+      <ClassroomShell embedded className="flex h-screen flex-col overflow-hidden bg-wall">
+        <div role="status" aria-busy="true" className="flex h-10 flex-shrink-0 items-center border-b-4 border-wood bg-surface px-3">
+          <span className="sr-only">Loading board</span>
+          <div aria-hidden="true" className="h-6 w-56 max-w-full rounded bg-line" />
+        </div>
+        <div aria-hidden="true" className={cx('flex-1 p-4', CANVAS)}>
+          <div className="h-24 w-full max-w-xl rounded border border-line bg-surface" />
+        </div>
+      </ClassroomShell>
     );
   }
 
@@ -213,7 +224,7 @@ function WorkspaceContent({ onNavigate }) {
         return <QuizBoard />;
       default:
         return (
-          <div className="flex items-center justify-center h-full text-gray-500">
+          <div className="flex h-full items-center justify-center text-ink-2">
             Unknown board type: {board.type}
           </div>
         );
@@ -221,7 +232,7 @@ function WorkspaceContent({ onNavigate }) {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
+    <ClassroomShell embedded className="flex h-screen flex-col overflow-hidden bg-wall">
       <BoardHeader
         boardName={board.name}
         boardType={board.type}
@@ -249,7 +260,7 @@ function WorkspaceContent({ onNavigate }) {
         }}
       />
       <div className="flex-1 flex overflow-hidden">
-        <main className="flex-1 overflow-auto">
+        <main className={cx('flex-1 overflow-auto', CANVAS)}>
           {renderBoard()}
         </main>
         {isLecturerOrAdmin && (
@@ -278,50 +289,46 @@ function WorkspaceContent({ onNavigate }) {
         }}
       />
 
-      {/* Unsaved changes confirmation modal */}
+      {/* Unsaved changes confirmation: shared dialog (focus in, Escape closes, focus returns to the opener) */}
       {showLeaveModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-backdropFade" role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') setShowLeaveModal(false); }}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md animate-scaleIn">
-            <div className="p-6">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-amber-600" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">Unsaved Changes</h3>
-              </div>
-              <p className="text-gray-600 mb-6">You have unsaved changes that will be lost if you leave without saving.</p>
-              <div className="flex flex-col space-y-2">
-                <button
-                  onClick={async () => {
-                    await handleSave();
-                    setShowLeaveModal(false);
-                    if (pendingNavigateRef.current) onNavigate(pendingNavigateRef.current);
-                  }}
-                  className="w-full px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium"
-                >
-                  Save & Leave
-                </button>
-                <button
-                  onClick={() => {
-                    setShowLeaveModal(false);
-                    if (pendingNavigateRef.current) onNavigate(pendingNavigateRef.current);
-                  }}
-                  className="w-full px-4 py-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition font-medium"
-                >
-                  Leave Without Saving
-                </button>
-                <button
-                  onClick={() => setShowLeaveModal(false)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ClassroomDialog
+          titleId="leave-board-title"
+          title="Unsaved Changes"
+          onClose={() => setShowLeaveModal(false)}
+          size="md"
+          footer={(
+            <>
+              <ClassroomButton
+                variant="primary"
+                className="w-full sm:w-auto"
+                onClick={async () => {
+                  await handleSave();
+                  setShowLeaveModal(false);
+                  if (pendingNavigateRef.current) onNavigate(pendingNavigateRef.current);
+                }}
+              >
+                Save & Leave
+              </ClassroomButton>
+              <ClassroomButton
+                variant="danger"
+                className="w-full sm:w-auto"
+                onClick={() => {
+                  setShowLeaveModal(false);
+                  if (pendingNavigateRef.current) onNavigate(pendingNavigateRef.current);
+                }}
+              >
+                Leave Without Saving
+              </ClassroomButton>
+              <ClassroomButton variant="secondary" className="w-full sm:w-auto" onClick={() => setShowLeaveModal(false)}>
+                Cancel
+              </ClassroomButton>
+            </>
+          )}
+        >
+          <p className="text-sm text-ink">You have unsaved changes that will be lost if you leave without saving.</p>
+        </ClassroomDialog>
       )}
-    </div>
+    </ClassroomShell>
   );
 }
 

@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Music, Upload, Trash2, Loader2 } from 'lucide-react';
 import { uploadFile } from '../../../utils/fileUpload';
 import { useMediaUrl } from '../../../utils/media';
+import { ClassroomButton } from '../../classroom';
+
+const ICON_BTN = 'btn-motion flex h-11 w-11 flex-none items-center justify-center rounded text-ink-2 hover:bg-surface-hover hover:text-danger md:h-8 md:w-8';
 
 export default function AudioBlock({ block, canEdit, onUpdate, onDelete }) {
   const [uploading, setUploading] = useState(false);
@@ -39,30 +42,27 @@ export default function AudioBlock({ block, canEdit, onUpdate, onDelete }) {
 
   if (!block.audioUrl) {
     return (
-      <div className="border-2 border-dashed border-pink-300 rounded-lg p-6 text-center bg-pink-50">
+      <div className="rounded-lg border-2 border-dashed border-line-strong bg-surface p-6 text-center">
         {canEdit ? (
           <>
-            <Music className="mx-auto mb-2 text-pink-400" size={32} />
-            <p className="text-sm text-pink-600 mb-2">Upload an audio file</p>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-3 py-1.5 bg-pink-500 text-white rounded text-sm hover:bg-pink-600"
-            >
-              <Upload size={14} className="inline mr-1" />
+            <Music className="mx-auto mb-2 text-ink-3" size={32} strokeWidth={1.5} aria-hidden="true" />
+            <p className="text-sm text-ink-2 mb-2">Upload an audio file</p>
+            <ClassroomButton variant="primary" icon={Upload} onClick={() => fileInputRef.current?.click()}>
               Choose Audio
-            </button>
+            </ClassroomButton>
             <input
               ref={fileInputRef}
               type="file"
               accept="audio/*"
+              aria-label="Audio file"
               onChange={handleUpload}
               className="hidden"
             />
           </>
         ) : (
           <>
-            <Music className="mx-auto mb-2 text-pink-400" size={32} />
-            <p className="text-sm text-gray-500">No audio uploaded</p>
+            <Music className="mx-auto mb-2 text-ink-3" size={32} strokeWidth={1.5} aria-hidden="true" />
+            <p className="text-sm text-ink-2">No audio uploaded</p>
           </>
         )}
       </div>
@@ -70,16 +70,16 @@ export default function AudioBlock({ block, canEdit, onUpdate, onDelete }) {
   }
 
   return (
-    <div className="border border-pink-200 rounded-lg p-4 bg-pink-50">
+    <div className="rounded-lg border border-line bg-surface p-4">
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Music size={18} className="text-pink-600" />
-          <span className="text-sm font-medium text-pink-800 truncate">{block.audioName || 'Audio'}</span>
-          {uploading && <Loader2 size={14} className="text-pink-400 animate-spin" />}
+        <div className="flex min-w-0 items-center gap-2">
+          <Music size={18} strokeWidth={1.5} className="flex-shrink-0 text-orange-700" aria-hidden="true" />
+          <span className="text-sm font-medium text-ink truncate">{block.audioName || 'Audio'}</span>
+          {uploading && <Loader2 size={14} className="flex-shrink-0 text-accent motion-safe:animate-spin" aria-hidden="true" />}
         </div>
         {canEdit && (
-          <button onClick={onDelete} className="text-gray-400 hover:text-red-500" title="Remove">
-            <Trash2 size={16} />
+          <button type="button" onClick={onDelete} className={ICON_BTN} title="Remove" aria-label="Remove">
+            <Trash2 size={16} strokeWidth={1.5} aria-hidden="true" />
           </button>
         )}
       </div>
@@ -87,7 +87,7 @@ export default function AudioBlock({ block, canEdit, onUpdate, onDelete }) {
         Your browser does not support the audio element.
       </audio>
       {uploading && (
-        <p className="text-xs text-pink-500 mt-2">Uploading to server...</p>
+        <p className="text-xs text-ink-2 mt-2">Uploading to server...</p>
       )}
     </div>
   );

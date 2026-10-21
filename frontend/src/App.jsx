@@ -23,6 +23,7 @@ import JoinBoardPage from './pages/JoinBoardPage';
 import JoinCoursePage from './pages/JoinCoursePage';
 import { ToastProvider } from './components/Toast';
 import GuestExpiryBanner from './components/GuestExpiryBanner';
+import ScrollToTop from './components/ScrollToTop';
 
 // Student sub-pages
 import StudentCoursesPage from './pages/student/StudentCoursesPage';
@@ -61,23 +62,19 @@ const PageWrapper = ({ children }) => {
 const SplashScreen = ({ visible, exiting }) => {
   if (!visible) return null;
   return (
-    <div className={`fixed inset-0 z-[9999] bg-gradient-to-br from-indigo-600 to-purple-700 flex flex-col items-center justify-center ${exiting ? 'animate-splashExit' : ''}`}>
-      <div className="animate-splashLogo flex flex-col items-center">
-        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-5 shadow-lg">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-            <line x1="3" y1="9" x2="21" y2="9" />
-            <line x1="9" y1="21" x2="9" y2="9" />
-          </svg>
-        </div>
-        <h1 className="text-white text-3xl font-bold tracking-tight">OpenCanvas</h1>
-        <p className="text-indigo-200 text-sm mt-1">Loading your workspace</p>
+    <div role="status" aria-live="polite" className={`fixed inset-0 z-[9999] canvas-dots flex flex-col items-center justify-center ${exiting ? 'animate-splashExit' : ''}`}>
+      <div className="flex items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0A66C2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <line x1="3" y1="9" x2="21" y2="9" />
+          <line x1="9" y1="21" x2="9" y2="9" />
+        </svg>
+        <span className="text-sm font-semibold text-ink">OpenCanvas</span>
       </div>
-      <div className="flex space-x-2 mt-8">
-        <div className="w-2 h-2 bg-white rounded-full splash-dot" />
-        <div className="w-2 h-2 bg-white rounded-full splash-dot" />
-        <div className="w-2 h-2 bg-white rounded-full splash-dot" />
+      <div className="mt-4 h-0.5 w-24 overflow-hidden bg-line" aria-hidden="true">
+        <div className="splash-bar h-full w-1/3 bg-accent" />
       </div>
+      <span className="sr-only">Loading your workspace</span>
     </div>
   );
 };
@@ -177,6 +174,7 @@ function AppContent() {
     <div className="App">
       <SplashScreen visible={showSplash} exiting={splashExiting} />
       <GuestExpiryBanner />
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<PageWrapper><HomePage onNavigate={handleNavigate} /></PageWrapper>} />
         <Route path="/login" element={<PageWrapper><LoginPage onNavigate={handleNavigate} /></PageWrapper>} />

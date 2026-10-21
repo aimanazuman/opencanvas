@@ -17,8 +17,8 @@ for (let h = 8; h <= 21; h++) {
 }
 
 const SUBJECT_COLORS = [
-  '#6366f1', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6',
-  '#ec4899', '#06b6d4', '#84cc16',
+  '#0A66C2', '#10b981', '#ef4444', '#f59e0b', '#0F8B8D',
+  '#D9480F', '#06b6d4', '#84cc16',
 ];
 
 // ---- Date Helpers ----
@@ -161,7 +161,7 @@ function MiniMonthCalendar({ currentMonday, onSelectWeek, onClose, schedule }) {
   };
 
   return (
-    <div className="absolute top-full left-0 mt-2 bg-white border rounded-xl shadow-xl z-50 p-4 w-80">
+    <div className="absolute top-full left-0 mt-2 bg-white border rounded-xl shadow-modal z-50 p-4 w-80">
       <div className="flex items-center justify-between mb-3">
         <button onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded">
           <ChevronLeft className="w-4 h-4" />
@@ -188,7 +188,7 @@ function MiniMonthCalendar({ currentMonday, onSelectWeek, onClose, schedule }) {
             key={wi}
             onClick={() => { if (monday) { onSelectWeek(monday); onClose(); } }}
             className={`grid grid-cols-7 gap-0 cursor-pointer rounded-lg transition ${
-              isSelected ? 'bg-indigo-50 ring-1 ring-indigo-300' : 'hover:bg-gray-50'
+              isSelected ? 'bg-accent-50 ring-1 ring-accent-300' : 'hover:bg-gray-50'
             }`}
           >
             {week.map((date, di) => {
@@ -198,7 +198,7 @@ function MiniMonthCalendar({ currentMonday, onSelectWeek, onClose, schedule }) {
                 <div
                   key={di}
                   className={`py-1.5 text-xs text-center ${
-                    isToday ? 'font-bold text-indigo-600' : 'text-gray-600'
+                    isToday ? 'font-semibold text-accent-600' : 'text-gray-600'
                   }`}
                 >
                   {date.getDate()}
@@ -207,7 +207,7 @@ function MiniMonthCalendar({ currentMonday, onSelectWeek, onClose, schedule }) {
             })}
             {hasEntries && (
               <div className="col-span-7 flex justify-center -mt-1 mb-0.5">
-                <div className="w-1 h-1 bg-indigo-400 rounded-full" />
+                <div className="w-1 h-1 bg-accent-400 rounded-full" />
               </div>
             )}
           </div>
@@ -216,7 +216,7 @@ function MiniMonthCalendar({ currentMonday, onSelectWeek, onClose, schedule }) {
       <div className="mt-2 pt-2 border-t flex justify-between">
         <button
           onClick={() => { onSelectWeek(getMonday(new Date())); onClose(); }}
-          className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+          className="text-xs text-accent-600 hover:text-accent-700 font-medium"
         >
           Go to today
         </button>
@@ -546,7 +546,7 @@ export default function StudyPlannerBoard() {
             onClick={() => setShowMonthPicker(!showMonthPicker)}
             className="flex items-center space-x-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition"
           >
-            <Calendar className="w-4 h-4 text-indigo-500" />
+            <Calendar className="w-4 h-4 text-accent-500" />
             <span className="text-sm font-semibold text-gray-800">
               {formatWeekRange(currentMonday)}
             </span>
@@ -562,7 +562,7 @@ export default function StudyPlannerBoard() {
           {!isCurrentWeek && (
             <button
               onClick={() => setCurrentMonday(getMonday(new Date()))}
-              className="px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition"
+              className="px-3 py-1.5 text-xs font-medium text-accent-600 bg-accent-50 rounded-lg hover:bg-accent-100 transition"
             >
               Today
             </button>
@@ -607,7 +607,7 @@ export default function StudyPlannerBoard() {
       {/* Weekly Goals */}
       <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5 mb-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-yellow-800 flex items-center space-x-2">
+          <h2 className="text-sm font-semibold text-yellow-800 flex items-center space-x-2">
             <Target className="w-4 h-4" />
             <span>Goals for this week</span>
           </h2>
@@ -681,13 +681,13 @@ export default function StudyPlannerBoard() {
                   <th
                     key={i}
                     className={`px-3 py-2 text-center border-b ${
-                      isToday ? 'bg-indigo-50' : 'bg-gray-50'
+                      isToday ? 'bg-accent-50' : 'bg-gray-50'
                     }`}
                   >
-                    <div className={`text-xs font-semibold ${isToday ? 'text-indigo-700' : 'text-gray-700'}`}>
+                    <div className={`text-xs font-semibold ${isToday ? 'text-accent-700' : 'text-gray-700'}`}>
                       {DAY_NAMES[i]}
                     </div>
-                    <div className={`text-[10px] mt-0.5 ${isToday ? 'text-indigo-500 font-medium' : 'text-gray-400'}`}>
+                    <div className={`text-[10px] mt-0.5 ${isToday ? 'text-accent-500 font-medium' : 'text-gray-400'}`}>
                       {formatShortDate(date)}
                     </div>
                   </th>
@@ -698,7 +698,7 @@ export default function StudyPlannerBoard() {
           <tbody>
             {HOURS.map(hour => (
               <tr key={hour}>
-                <td className="px-3 py-1 text-xs text-gray-500 border-r bg-gray-50 font-mono">
+                <td className="px-3 py-1 text-xs text-gray-500 border-r bg-gray-50 tabular-nums">
                   {hour}
                 </td>
                 {weekDates.map((date, di) => {
@@ -712,7 +712,7 @@ export default function StudyPlannerBoard() {
                       key={di}
                       onClick={() => handleCellClick(di, hour)}
                       className={`px-1 py-1 border-b border-r last:border-r-0 cursor-pointer hover:bg-gray-50 transition h-10 ${
-                        isToday ? 'bg-indigo-50/30' : ''
+                        isToday ? 'bg-accent-50/30' : ''
                       }`}
                     >
                       {entry && (
@@ -749,8 +749,8 @@ export default function StudyPlannerBoard() {
 
       {/* Cell Edit Modal */}
       {editingCell && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-[var(--scrim)] flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-modal w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 {getCellDisplayLabel(editingCell)}
@@ -768,7 +768,7 @@ export default function StudyPlannerBoard() {
                   value={cellSubject}
                   onChange={(e) => setCellSubject(e.target.value)}
                   placeholder="e.g., CS301 - Web Tech"
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   autoFocus
                 />
               </div>
@@ -836,10 +836,10 @@ export default function StudyPlannerBoard() {
                   <div className="space-y-1 mb-2">
                     {cellFiles.map(file => (
                       <div key={file.id} className="flex items-center gap-2 text-sm px-2 py-1 bg-gray-50 rounded">
-                        {file._uploading && <Loader2 size={12} className="text-indigo-500 animate-spin shrink-0" />}
+                        {file._uploading && <Loader2 size={12} className="text-accent-500 animate-spin shrink-0" />}
                         <span className="truncate flex-1">
                           {file.name}
-                          {file._uploading && <span className="text-xs text-indigo-500 ml-1">uploading...</span>}
+                          {file._uploading && <span className="text-xs text-accent-500 ml-1">uploading...</span>}
                         </span>
                         <button onClick={() => handleRemoveFile(file.id)} className="text-red-400 hover:text-red-600">
                           <Trash2 size={14} />
@@ -851,7 +851,7 @@ export default function StudyPlannerBoard() {
                 <button
                   onClick={() => !uploadingFile && fileInputRef.current?.click()}
                   disabled={uploadingFile}
-                  className="text-sm text-indigo-600 hover:text-indigo-700 disabled:opacity-50 flex items-center gap-1"
+                  className="text-sm text-accent-600 hover:text-accent-700 disabled:opacity-50 flex items-center gap-1"
                 >
                   {uploadingFile ? <><Loader2 size={14} className="animate-spin" /> Uploading...</> : '+ Add file'}
                 </button>
@@ -875,7 +875,7 @@ export default function StudyPlannerBoard() {
                     {cellLinks.map(link => (
                       <div key={link.id} className="flex items-center gap-2 text-sm px-2 py-1 bg-gray-50 rounded">
                         {safeUrl(link.url) ? (
-                          <a href={safeUrl(link.url)} target="_blank" rel="noopener noreferrer" className="truncate flex-1 text-blue-600 hover:underline">
+                          <a href={safeUrl(link.url)} target="_blank" rel="noopener noreferrer" className="truncate flex-1 text-accent-600 hover:underline">
                             {link.url}
                           </a>
                         ) : (
@@ -897,7 +897,7 @@ export default function StudyPlannerBoard() {
                     placeholder="https://..."
                     className="flex-1 px-2 py-1 border rounded text-sm"
                   />
-                  <button onClick={handleAddLink} className="text-sm text-indigo-600 hover:text-indigo-700 px-2">
+                  <button onClick={handleAddLink} className="text-sm text-accent-600 hover:text-accent-700 px-2">
                     Add
                   </button>
                 </div>
@@ -929,7 +929,7 @@ export default function StudyPlannerBoard() {
                     placeholder="Add a comment..."
                     className="flex-1 px-2 py-1 border rounded text-sm"
                   />
-                  <button onClick={handleAddComment} className="text-sm text-indigo-600 hover:text-indigo-700 px-2">
+                  <button onClick={handleAddComment} className="text-sm text-accent-600 hover:text-accent-700 px-2">
                     Post
                   </button>
                 </div>
@@ -954,7 +954,7 @@ export default function StudyPlannerBoard() {
                 </button>
                 <button
                   onClick={handleCellSave}
-                  className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                  className="px-4 py-2 text-sm bg-accent-600 text-white rounded-lg hover:bg-accent-700"
                 >
                   Save
                 </button>

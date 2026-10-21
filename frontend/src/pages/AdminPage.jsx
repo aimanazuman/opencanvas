@@ -276,18 +276,18 @@ function AdminPage({ onNavigate }) {
   }, [userSearchQuery, userFilterRole, activeMenu, loadUsers]);
 
   const colorClasses = {
-    indigo: 'bg-indigo-100 text-indigo-600',
+    azure: 'bg-accent-100 text-accent-600',
     green: 'bg-green-100 text-green-600',
-    purple: 'bg-purple-100 text-purple-600',
+    teal: 'bg-teal-100 text-teal-600',
     yellow: 'bg-yellow-100 text-yellow-600',
-    blue: 'bg-blue-100 text-blue-600',
+    blue: 'bg-accent-100 text-accent-600',
     gray: 'bg-gray-100 text-gray-600',
   };
 
   const getStatusColor = (percentage) => {
     if (percentage >= 90) return 'bg-green-500';
     if (percentage >= 50) return 'bg-yellow-500';
-    return 'bg-indigo-500';
+    return 'bg-accent-500';
   };
 
   // User CRUD handlers
@@ -439,9 +439,9 @@ function AdminPage({ onNavigate }) {
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading admin panel...</p>
         </div>
       </div>
@@ -449,9 +449,9 @@ function AdminPage({ onNavigate }) {
   }
 
   const stats = [
-    { label: 'Total Users', value: dashboardStats?.total_users || 0, change: `${dashboardStats?.users_by_role?.students || 0} students`, icon: Users, color: 'indigo' },
+    { label: 'Total Users', value: dashboardStats?.total_users || 0, change: `${dashboardStats?.users_by_role?.students || 0} students`, icon: Users, color: 'azure' },
     { label: 'Active Boards', value: dashboardStats?.total_boards || 0, change: `${dashboardStats?.total_courses || 0} courses`, icon: Folder, color: 'green' },
-    { label: 'Storage Used', value: formatStorageSizeShort(dashboardStats?.storage_used_bytes || 0), change: `${dashboardStats?.storage_percentage || 0}% of quota`, icon: HardDrive, color: 'purple' },
+    { label: 'Storage Used', value: formatStorageSizeShort(dashboardStats?.storage_used_bytes || 0), change: `${dashboardStats?.storage_percentage || 0}% of quota`, icon: HardDrive, color: 'teal' },
     { label: 'Guest Accounts', value: dashboardStats?.guest_users || 0, change: `${dashboardStats?.expired_guests || 0} expired`, icon: UserX, color: 'yellow', onClick: () => setActiveMenu('guests') },
   ];
 
@@ -460,12 +460,12 @@ function AdminPage({ onNavigate }) {
     <>
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">System Overview</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">System Overview</h1>
           <p className="text-gray-600 mt-1">Monitor system performance and manage users</p>
         </div>
         <button
           onClick={() => { setActiveMenu('users'); handleOpenAddUser(); }}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center space-x-2 self-start"
+          className="bg-accent-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-accent-700 transition flex items-center space-x-2 self-start"
         >
           <UserPlus className="w-5 h-5" />
           <span>Add User</span>
@@ -477,13 +477,13 @@ function AdminPage({ onNavigate }) {
         {stats.map((stat, idx) => (
           <div
             key={idx}
-            className={`bg-white rounded-xl shadow-sm border p-6 ${stat.onClick ? 'cursor-pointer hover:shadow-md transition' : ''}`}
+            className={`bg-white rounded-xl border p-6 ${stat.onClick ? 'cursor-pointer hover:shadow-float transition' : ''}`}
             onClick={stat.onClick}
           >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">{stat.label}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
+                <p className="text-2xl font-semibold text-gray-900 mt-1">{stat.value}</p>
                 <p className="text-sm mt-1 text-gray-600">{stat.change}</p>
               </div>
               <div className={`p-3 rounded-lg ${colorClasses[stat.color]}`}>
@@ -496,13 +496,13 @@ function AdminPage({ onNavigate }) {
 
       <div className="grid lg:grid-cols-2 gap-8 mb-8">
         {/* User Breakdown */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">Users by Role</h2>
+        <div className="bg-white rounded-xl border p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Users by Role</h2>
           <div className="space-y-4">
             {[
-              { role: 'Students', count: dashboardStats?.users_by_role?.students || 0, color: 'bg-blue-500' },
+              { role: 'Students', count: dashboardStats?.users_by_role?.students || 0, color: 'bg-accent-500' },
               { role: 'Lecturers', count: dashboardStats?.users_by_role?.lecturers || 0, color: 'bg-green-500' },
-              { role: 'Admins', count: dashboardStats?.users_by_role?.admins || 0, color: 'bg-purple-500' },
+              { role: 'Admins', count: dashboardStats?.users_by_role?.admins || 0, color: 'bg-teal-500' },
             ].map((item, idx) => {
               const total = dashboardStats?.total_users || 1;
               const pct = Math.round((item.count / total) * 100);
@@ -522,34 +522,34 @@ function AdminPage({ onNavigate }) {
         </div>
 
         {/* Quick Stats */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">System Status</h2>
+        <div className="bg-white rounded-xl border p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">System Status</h2>
           <div className="space-y-4">
             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
               <span className="text-gray-700">Active Users</span>
-              <span className="font-bold text-green-600">{dashboardStats?.active_users || 0}</span>
+              <span className="font-semibold text-green-600">{dashboardStats?.active_users || 0}</span>
             </div>
             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
               <span className="text-gray-700">Active Courses</span>
-              <span className="font-bold text-blue-600">{dashboardStats?.total_courses || 0}</span>
+              <span className="font-semibold text-accent-600">{dashboardStats?.total_courses || 0}</span>
             </div>
             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
               <span className="text-gray-700">Active Boards</span>
-              <span className="font-bold text-purple-600">{dashboardStats?.total_boards || 0}</span>
+              <span className="font-semibold text-teal-600">{dashboardStats?.total_boards || 0}</span>
             </div>
             <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
               <span className="text-gray-700">Storage</span>
-              <span className="font-bold text-gray-900">{formatStorageSizeShort(dashboardStats?.storage_used_bytes || 0)} / {formatStorageSizeShort(dashboardStats?.storage_quota_bytes || 0)}</span>
+              <span className="font-semibold text-gray-900">{formatStorageSizeShort(dashboardStats?.storage_used_bytes || 0)} / {formatStorageSizeShort(dashboardStats?.storage_quota_bytes || 0)}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Recent Logs Preview */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
+      <div className="bg-white rounded-xl border p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Recent Activity</h2>
-          <button onClick={() => setActiveMenu('logs')} className="text-indigo-600 text-sm hover:underline">View All</button>
+          <h2 className="text-xl font-semibold text-gray-900">Recent Activity</h2>
+          <button onClick={() => setActiveMenu('logs')} className="text-accent-600 text-sm hover:underline">View All</button>
         </div>
         {auditLogs.length === 0 ? (
           <p className="text-gray-400 text-center py-4">No recent activity</p>
@@ -560,7 +560,7 @@ function AdminPage({ onNavigate }) {
                 <div className={`w-2 h-2 rounded-full ${
                   log.type === 'error' ? 'bg-red-500' :
                   log.type === 'warning' ? 'bg-yellow-500' :
-                  log.type === 'success' ? 'bg-green-500' : 'bg-blue-500'
+                  log.type === 'success' ? 'bg-green-500' : 'bg-accent-500'
                 }`}></div>
                 <span className="flex-1 text-gray-700 text-sm">{log.message}</span>
                 {log.user && <span className="text-xs text-gray-500">{log.user}</span>}
@@ -578,20 +578,20 @@ function AdminPage({ onNavigate }) {
     <>
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">User Management</h1>
           <p className="text-gray-600 mt-1">Manage users, roles, and permissions</p>
         </div>
         <div className="flex items-center space-x-3 self-start">
           <button
             onClick={() => setShowBulkImport(true)}
-            className="bg-white text-indigo-600 border border-indigo-600 px-4 py-2 rounded-lg font-medium hover:bg-indigo-50 transition flex items-center space-x-2"
+            className="bg-white text-accent-600 border border-accent-600 px-4 py-2 rounded-lg font-medium hover:bg-accent-50 transition flex items-center space-x-2"
           >
             <Upload className="w-5 h-5" />
             <span>Bulk Import</span>
           </button>
           <button
             onClick={handleOpenAddUser}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center space-x-2"
+            className="bg-accent-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-accent-700 transition flex items-center space-x-2"
           >
             <UserPlus className="w-5 h-5" />
             <span>Add User</span>
@@ -601,26 +601,26 @@ function AdminPage({ onNavigate }) {
 
       {/* User Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow-sm border p-4">
+        <div className="bg-white rounded-lg border p-4">
           <p className="text-sm text-gray-600">Total Users</p>
-          <p className="text-2xl font-bold text-gray-900">{allUsers.length}</p>
+          <p className="text-2xl font-semibold text-gray-900">{allUsers.length}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border p-4">
+        <div className="bg-white rounded-lg border p-4">
           <p className="text-sm text-gray-600">Students</p>
-          <p className="text-2xl font-bold text-blue-600">{allUsers.filter(u => u.role === 'student').length}</p>
+          <p className="text-2xl font-semibold text-accent-600">{allUsers.filter(u => u.role === 'student').length}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border p-4">
+        <div className="bg-white rounded-lg border p-4">
           <p className="text-sm text-gray-600">Lecturers</p>
-          <p className="text-2xl font-bold text-green-600">{allUsers.filter(u => u.role === 'lecturer').length}</p>
+          <p className="text-2xl font-semibold text-green-600">{allUsers.filter(u => u.role === 'lecturer').length}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border p-4">
+        <div className="bg-white rounded-lg border p-4">
           <p className="text-sm text-gray-600">Admins</p>
-          <p className="text-2xl font-bold text-purple-600">{allUsers.filter(u => u.role === 'admin').length}</p>
+          <p className="text-2xl font-semibold text-teal-600">{allUsers.filter(u => u.role === 'admin').length}</p>
         </div>
       </div>
 
       {/* Search and Filter */}
-      <div className="bg-white rounded-lg shadow-sm border p-4 mb-6">
+      <div className="bg-white rounded-lg border p-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -629,7 +629,7 @@ function AdminPage({ onNavigate }) {
               placeholder="Search users by name or email..."
               value={userSearchQuery}
               onChange={(e) => setUserSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full pl-10 pr-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
             />
           </div>
           <div className="relative">
@@ -637,7 +637,7 @@ function AdminPage({ onNavigate }) {
             <select
               value={userFilterRole}
               onChange={(e) => setUserFilterRole(e.target.value)}
-              className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 appearance-none bg-white min-w-[150px]"
+              className="pl-10 pr-8 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent appearance-none bg-white min-w-[150px]"
             >
               <option value="all">All Roles</option>
               <option value="admin">Admin</option>
@@ -651,8 +651,8 @@ function AdminPage({ onNavigate }) {
 
       {/* Bulk Actions Bar */}
       {selectedUsers.size > 0 && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-4 flex items-center justify-between animate-slideDown">
-          <span className="text-sm text-indigo-700 font-medium">
+        <div className="bg-accent-50 border border-accent-200 rounded-lg p-3 mb-4 flex items-center justify-between animate-slideDown">
+          <span className="text-sm text-accent-700 font-medium">
             {selectedUsers.size} user{selectedUsers.size !== 1 ? 's' : ''} selected
           </span>
           <div className="flex items-center space-x-2">
@@ -674,7 +674,7 @@ function AdminPage({ onNavigate }) {
       )}
 
       {/* Users Table */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+      <div className="bg-white rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px]">
             <thead className="bg-gray-50">
@@ -684,7 +684,7 @@ function AdminPage({ onNavigate }) {
                     type="checkbox"
                     checked={allUsers.length > 0 && selectedUsers.size === allUsers.length}
                     onChange={toggleSelectAll}
-                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="w-4 h-4 rounded border-line-strong text-accent-600 focus-visible:ring-accent"
                   />
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">User</th>
@@ -703,18 +703,18 @@ function AdminPage({ onNavigate }) {
                   ? `${u.first_name[0]}${u.last_name[0]}`
                   : u.username?.[0]?.toUpperCase() || '?';
                 return (
-                  <tr key={u.id} className={`hover:bg-gray-50 ${selectedUsers.has(u.id) ? 'bg-indigo-50' : ''}`}>
+                  <tr key={u.id} className={`hover:bg-gray-50 ${selectedUsers.has(u.id) ? 'bg-accent-50' : ''}`}>
                     <td className="px-4 py-3">
                       <input
                         type="checkbox"
                         checked={selectedUsers.has(u.id)}
                         onChange={() => toggleUserSelection(u.id)}
-                        className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        className="w-4 h-4 rounded border-line-strong text-accent-600 focus-visible:ring-accent"
                       />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium">
+                        <div className="w-10 h-10 bg-accent-500 rounded-full flex items-center justify-center text-white font-medium">
                           {initials}
                         </div>
                         <div>
@@ -727,7 +727,7 @@ function AdminPage({ onNavigate }) {
                       <div className="flex items-center space-x-1.5">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
                           u.role === 'admin' ? 'bg-red-100 text-red-700' :
-                          u.role === 'lecturer' ? 'bg-blue-100 text-blue-700' :
+                          u.role === 'lecturer' ? 'bg-accent-100 text-accent-700' :
                           'bg-gray-100 text-gray-700'
                         }`}>
                           {u.role}
@@ -792,18 +792,18 @@ function AdminPage({ onNavigate }) {
     const byType = storageStats?.by_type || [];
 
     const typeIcons = { image: Image, document: FileText, video: Video, other: Folder, board_content: Layout };
-    const typeColors = { image: 'blue', document: 'green', video: 'purple', other: 'gray', board_content: 'indigo' };
+    const typeColors = { image: 'blue', document: 'green', video: 'teal', other: 'gray', board_content: 'azure' };
 
     return (
       <>
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Storage Management</h1>
+            <h1 className="text-3xl font-semibold text-gray-900">Storage Management</h1>
             <p className="text-gray-600 mt-1">Monitor and manage system storage</p>
           </div>
           <button
             onClick={() => { loadStorageStats(); loadLargeFiles(); loadUserStorage(); toast.info('Storage data refreshed'); }}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center space-x-2 self-start"
+            className="bg-accent-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-accent-700 transition flex items-center space-x-2 self-start"
           >
             <RefreshCw className="w-5 h-5" />
             <span>Refresh</span>
@@ -812,7 +812,7 @@ function AdminPage({ onNavigate }) {
 
         {/* Storage Overview */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border p-6">
+          <div className="bg-white rounded-xl border p-6">
             <h3 className="font-semibold text-gray-900 mb-4">Total Storage</h3>
             <div className="relative w-32 h-32 mx-auto mb-4">
               <svg className="w-32 h-32 transform -rotate-90">
@@ -825,20 +825,20 @@ function AdminPage({ onNavigate }) {
                 />
                 <defs>
                   <linearGradient id="storageGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#3b82f6" />
-                    <stop offset="100%" stopColor="#8b5cf6" />
+                    <stop offset="0%" stopColor="#1F76CB" />
+                    <stop offset="100%" stopColor="#0F8B8D" />
                   </linearGradient>
                 </defs>
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
-                  <span className="text-2xl font-bold text-gray-900">{Math.round(percentageUsed)}%</span>
+                  <span className="text-2xl font-semibold text-gray-900">{Math.round(percentageUsed)}%</span>
                   <p className="text-xs text-gray-500">Used</p>
                 </div>
               </div>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">{formatStorageSize(totalUsedBytes)}</p>
+              <p className="text-2xl font-semibold text-gray-900">{formatStorageSize(totalUsedBytes)}</p>
               <p className="text-gray-500">of {formatStorageSize(effectiveLimitBytes)} used</p>
             </div>
             {systemLimitGb && systemLimitGb > 0 && (
@@ -854,7 +854,7 @@ function AdminPage({ onNavigate }) {
                         ? 'bg-red-500'
                         : percentageUsed >= 70
                         ? 'bg-amber-500'
-                        : 'bg-indigo-500'
+                        : 'bg-accent-500'
                     }`}
                     style={{ width: `${Math.min(100, percentageUsed)}%` }}
                   />
@@ -863,7 +863,7 @@ function AdminPage({ onNavigate }) {
             )}
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border p-6 lg:col-span-2">
+          <div className="bg-white rounded-xl border p-6 lg:col-span-2">
             <h3 className="font-semibold text-gray-900 mb-4">Storage by Type</h3>
             {byType.length === 0 ? (
               <p className="text-gray-400 text-center py-4">No files uploaded yet</p>
@@ -889,9 +889,9 @@ function AdminPage({ onNavigate }) {
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
                           className={`h-2 rounded-full ${
-                            color === 'blue' ? 'bg-blue-500' :
+                            color === 'blue' ? 'bg-accent-500' :
                             color === 'green' ? 'bg-green-500' :
-                            color === 'purple' ? 'bg-purple-500' : 'bg-gray-400'
+                            color === 'teal' ? 'bg-teal-500' : 'bg-gray-400'
                           }`}
                           style={{ width: totalUsedBytes > 0 ? `${(item.size_bytes / totalUsedBytes) * 100}%` : '0%' }}
                         />
@@ -905,7 +905,7 @@ function AdminPage({ onNavigate }) {
         </div>
 
         {/* User Storage Usage */}
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden mb-8">
+        <div className="bg-white rounded-xl border overflow-hidden mb-8">
           <div className="p-6 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <h3 className="font-semibold text-gray-900">User Storage Usage</h3>
             <div className="flex items-center space-x-3">
@@ -916,7 +916,7 @@ function AdminPage({ onNavigate }) {
                   placeholder="Search users..."
                   value={storageSearchQuery}
                   onChange={(e) => setStorageSearchQuery(e.target.value)}
-                  className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm w-48 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="pl-9 pr-3 py-1.5 border border-line-strong rounded-lg text-sm w-48 focus-visible:ring-2 focus-visible:ring-accent focus:border-transparent"
                 />
               </div>
               <select
@@ -945,7 +945,7 @@ function AdminPage({ onNavigate }) {
               ) : (
               filteredStorageData.map((u) => {
                 const pct = u.percentage_used;
-                const barColor = pct >= 90 ? 'bg-red-500' : pct >= 80 ? 'bg-yellow-500' : 'bg-blue-500';
+                const barColor = pct >= 90 ? 'bg-red-500' : pct >= 80 ? 'bg-yellow-500' : 'bg-accent-500';
                 return (
                   <div key={u.id} className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -953,7 +953,7 @@ function AdminPage({ onNavigate }) {
                         <span className="font-medium text-gray-900 text-sm">{u.display_name}</span>
                         <span className={`px-1.5 py-0.5 rounded text-xs capitalize ${
                           u.role === 'admin' ? 'bg-red-100 text-red-700' :
-                          u.role === 'lecturer' ? 'bg-blue-100 text-blue-700' :
+                          u.role === 'lecturer' ? 'bg-accent-100 text-accent-700' :
                           'bg-gray-100 text-gray-700'
                         }`}>{u.role}</span>
                       </div>
@@ -971,7 +971,7 @@ function AdminPage({ onNavigate }) {
         </div>
 
         {/* Large Files */}
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div className="bg-white rounded-xl border overflow-hidden">
           <div className="p-6 border-b">
             <h3 className="font-semibold text-gray-900">Large Files (Top 20)</h3>
           </div>
@@ -1026,14 +1026,14 @@ function AdminPage({ onNavigate }) {
 
         {/* File Delete Modal */}
         {showFileDeleteModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-backdropFade" role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') setShowFileDeleteModal(null); }}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md animate-scaleIn">
+          <div className="fixed inset-0 bg-[var(--scrim)] flex items-center justify-center z-50 p-4 animate-backdropFade" role="dialog" aria-modal="true" onKeyDown={(e) => { if (e.key === 'Escape') setShowFileDeleteModal(null); }}>
+            <div className="bg-white rounded-xl shadow-modal w-full max-w-md animate-scaleIn">
               <div className="p-6">
                 <div className="flex items-center space-x-3 mb-4">
                   <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
                     <Trash2 className="w-5 h-5 text-red-600" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900">Delete File</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Delete File</h3>
                 </div>
                 <p className="text-gray-600 mb-1">
                   You are about to delete <strong>{showFileDeleteModal.name}</strong> ({showFileDeleteModal.size_display}) owned by <strong>{showFileDeleteModal.owner}</strong>.
@@ -1046,7 +1046,7 @@ function AdminPage({ onNavigate }) {
                     <select
                       value={fileDeleteReason}
                       onChange={(e) => setFileDeleteReason(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      className="w-full px-3 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus:ring-red-500 focus:border-red-500"
                     >
                       <option value="">Select a reason...</option>
                       <option value="Pornography or sexually explicit content">Pornography or sexually explicit content</option>
@@ -1068,7 +1068,7 @@ function AdminPage({ onNavigate }) {
                       onChange={(e) => setFileDeleteCustomMessage(e.target.value)}
                       placeholder="Provide additional details for the user..."
                       rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+                      className="w-full px-3 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
                     />
                   </div>
                 </div>
@@ -1101,7 +1101,7 @@ function AdminPage({ onNavigate }) {
     <>
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">System Settings</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">System Settings</h1>
           <p className="text-gray-600 mt-1">Configure system-wide settings and preferences</p>
         </div>
         {settingsSaved && (
@@ -1114,10 +1114,10 @@ function AdminPage({ onNavigate }) {
 
       <div className="space-y-6">
         {/* General Settings */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
+        <div className="bg-white rounded-xl border p-6">
           <div className="flex items-center space-x-3 mb-6">
-            <Globe className="w-6 h-6 text-blue-600" />
-            <h2 className="text-xl font-bold text-gray-900">General Settings</h2>
+            <Globe className="w-6 h-6 text-accent-600" />
+            <h2 className="text-xl font-semibold text-gray-900">General Settings</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -1126,7 +1126,7 @@ function AdminPage({ onNavigate }) {
                 type="text"
                 value={systemSettings.siteName}
                 onChange={(e) => setSystemSettings({...systemSettings, siteName: e.target.value})}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
               />
             </div>
             <div>
@@ -1135,7 +1135,7 @@ function AdminPage({ onNavigate }) {
                 type="text"
                 value={systemSettings.siteUrl}
                 onChange={(e) => setSystemSettings({...systemSettings, siteUrl: e.target.value})}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
               />
             </div>
             <div>
@@ -1144,7 +1144,7 @@ function AdminPage({ onNavigate }) {
                 type="email"
                 value={systemSettings.adminEmail}
                 onChange={(e) => setSystemSettings({...systemSettings, adminEmail: e.target.value})}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
               />
             </div>
             <div>
@@ -1155,7 +1155,7 @@ function AdminPage({ onNavigate }) {
                 step="0.5"
                 value={systemSettings.defaultStorageQuota}
                 onChange={(e) => setSystemSettings({...systemSettings, defaultStorageQuota: parseFloat(e.target.value) || 5})}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
               />
               <p className="text-xs text-gray-500 mt-1">Applied to newly registered users</p>
             </div>
@@ -1167,7 +1167,7 @@ function AdminPage({ onNavigate }) {
                 step="1"
                 value={systemSettings.systemStorageLimit}
                 onChange={(e) => setSystemSettings({...systemSettings, systemStorageLimit: e.target.value})}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                 placeholder="No limit"
               />
               <p className="text-xs text-gray-500 mt-1">Maximum total storage across all users (leave empty for unlimited)</p>
@@ -1176,10 +1176,10 @@ function AdminPage({ onNavigate }) {
         </div>
 
         {/* Security Settings */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
+        <div className="bg-white rounded-xl border p-6">
           <div className="flex items-center space-x-3 mb-6">
             <Lock className="w-6 h-6 text-red-600" />
-            <h2 className="text-xl font-bold text-gray-900">Security Settings</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Security Settings</h2>
           </div>
           <div className="space-y-4">
             <div className="flex items-center justify-between py-3 border-b">
@@ -1194,7 +1194,7 @@ function AdminPage({ onNavigate }) {
                   onChange={(e) => setSystemSettings({...systemSettings, allowRegistration: e.target.checked})}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus-visible:ring-accent rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-line-strong after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-600"></div>
               </label>
             </div>
             <div className="flex items-center justify-between py-3 border-b">
@@ -1209,7 +1209,7 @@ function AdminPage({ onNavigate }) {
                   onChange={(e) => setSystemSettings({...systemSettings, requireEmailVerification: e.target.checked})}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus-visible:ring-accent rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-line-strong after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-600"></div>
               </label>
             </div>
             <div className="flex items-center justify-between py-3">
@@ -1221,17 +1221,17 @@ function AdminPage({ onNavigate }) {
                 type="number"
                 value={systemSettings.sessionTimeout}
                 onChange={(e) => setSystemSettings({...systemSettings, sessionTimeout: parseInt(e.target.value) || 30})}
-                className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-24 px-3 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
               />
             </div>
           </div>
         </div>
 
         {/* System Toggles */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
+        <div className="bg-white rounded-xl border p-6">
           <div className="flex items-center space-x-3 mb-6">
-            <Settings className="w-6 h-6 text-purple-600" />
-            <h2 className="text-xl font-bold text-gray-900">System Toggles</h2>
+            <Settings className="w-6 h-6 text-teal-600" />
+            <h2 className="text-xl font-semibold text-gray-900">System Toggles</h2>
           </div>
           <div className="space-y-4">
             <div className="flex items-center justify-between py-3 border-b">
@@ -1246,7 +1246,7 @@ function AdminPage({ onNavigate }) {
                   onChange={(e) => setSystemSettings({...systemSettings, maintenanceMode: e.target.checked})}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus-visible:ring-accent rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-line-strong after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
               </label>
             </div>
             <div className="flex items-center justify-between py-3 border-b">
@@ -1261,7 +1261,7 @@ function AdminPage({ onNavigate }) {
                   onChange={(e) => setSystemSettings({...systemSettings, enableNotifications: e.target.checked})}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus-visible:ring-accent rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-line-strong after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-600"></div>
               </label>
             </div>
             <div className="flex items-center justify-between py-3">
@@ -1276,17 +1276,17 @@ function AdminPage({ onNavigate }) {
                   onChange={(e) => setSystemSettings({...systemSettings, enableAnalytics: e.target.checked})}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus-visible:ring-accent rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-line-strong after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-600"></div>
               </label>
             </div>
           </div>
         </div>
 
         {/* Username & Email Change Policy */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
+        <div className="bg-white rounded-xl border p-6">
           <div className="flex items-center space-x-3 mb-6">
             <Settings className="w-6 h-6 text-orange-600" />
-            <h2 className="text-xl font-bold text-gray-900">Username & Email Change Policy</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Username & Email Change Policy</h2>
           </div>
           <div className="grid md:grid-cols-2 gap-6">
             {/* Username Policy */}
@@ -1301,7 +1301,7 @@ function AdminPage({ onNavigate }) {
                     onChange={(e) => setSystemSettings({...systemSettings, allowUsernameChange: e.target.checked})}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus-visible:ring-accent rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-line-strong after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-600"></div>
                 </label>
               </div>
               <div>
@@ -1311,7 +1311,7 @@ function AdminPage({ onNavigate }) {
                   min="0"
                   value={systemSettings.usernameChangeCooldownDays}
                   onChange={(e) => setSystemSettings({...systemSettings, usernameChangeCooldownDays: parseInt(e.target.value) || 0})}
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full mt-1 px-3 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                 />
               </div>
               <div>
@@ -1321,7 +1321,7 @@ function AdminPage({ onNavigate }) {
                   min="1"
                   value={systemSettings.maxUsernameChanges}
                   onChange={(e) => setSystemSettings({...systemSettings, maxUsernameChanges: parseInt(e.target.value) || 1})}
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full mt-1 px-3 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                 />
               </div>
             </div>
@@ -1337,7 +1337,7 @@ function AdminPage({ onNavigate }) {
                     onChange={(e) => setSystemSettings({...systemSettings, allowEmailChange: e.target.checked})}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus-visible:ring-accent rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-line-strong after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-600"></div>
                 </label>
               </div>
               <div>
@@ -1347,7 +1347,7 @@ function AdminPage({ onNavigate }) {
                   min="0"
                   value={systemSettings.emailChangeCooldownDays}
                   onChange={(e) => setSystemSettings({...systemSettings, emailChangeCooldownDays: parseInt(e.target.value) || 0})}
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full mt-1 px-3 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                 />
               </div>
               <div>
@@ -1357,7 +1357,7 @@ function AdminPage({ onNavigate }) {
                   min="1"
                   value={systemSettings.maxEmailChanges}
                   onChange={(e) => setSystemSettings({...systemSettings, maxEmailChanges: parseInt(e.target.value) || 1})}
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full mt-1 px-3 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                 />
               </div>
             </div>
@@ -1368,7 +1368,7 @@ function AdminPage({ onNavigate }) {
         <div className="flex justify-end">
           <button
             onClick={handleSaveSettings}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-lg transition flex items-center space-x-2"
+            className="bg-accent-600 text-white px-8 py-3 rounded-lg font-semibold hover:shadow-pop transition flex items-center space-x-2"
           >
             <Save className="w-5 h-5" />
             <span>Save All Settings</span>
@@ -1385,7 +1385,7 @@ function AdminPage({ onNavigate }) {
       <>
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Logs & Audit</h1>
+            <h1 className="text-3xl font-semibold text-gray-900">Logs & Audit</h1>
             <p className="text-gray-600 mt-1">View system activity logs and audit trail</p>
           </div>
           <div className="flex items-center space-x-3 flex-wrap gap-2">
@@ -1437,26 +1437,26 @@ function AdminPage({ onNavigate }) {
 
         {/* Log Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow-sm border p-4">
+          <div className="bg-white rounded-lg border p-4">
             <p className="text-sm text-gray-600">Total Logs</p>
-            <p className="text-2xl font-bold text-gray-900">{auditLogs.length}</p>
+            <p className="text-2xl font-semibold text-gray-900">{auditLogs.length}</p>
           </div>
-          <div className="bg-white rounded-lg shadow-sm border p-4">
+          <div className="bg-white rounded-lg border p-4">
             <p className="text-sm text-gray-600">Info</p>
-            <p className="text-2xl font-bold text-blue-600">{auditLogs.filter(l => l.type === 'info').length}</p>
+            <p className="text-2xl font-semibold text-accent-600">{auditLogs.filter(l => l.type === 'info').length}</p>
           </div>
-          <div className="bg-white rounded-lg shadow-sm border p-4">
+          <div className="bg-white rounded-lg border p-4">
             <p className="text-sm text-gray-600">Success</p>
-            <p className="text-2xl font-bold text-green-600">{auditLogs.filter(l => l.type === 'success').length}</p>
+            <p className="text-2xl font-semibold text-green-600">{auditLogs.filter(l => l.type === 'success').length}</p>
           </div>
-          <div className="bg-white rounded-lg shadow-sm border p-4">
+          <div className="bg-white rounded-lg border p-4">
             <p className="text-sm text-gray-600">Warning</p>
-            <p className="text-2xl font-bold text-yellow-600">{auditLogs.filter(l => l.type === 'warning').length}</p>
+            <p className="text-2xl font-semibold text-yellow-600">{auditLogs.filter(l => l.type === 'warning').length}</p>
           </div>
         </div>
 
         {/* Logs List */}
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div className="bg-white rounded-xl border overflow-hidden">
           <div className="p-4 border-b">
             <h3 className="font-semibold text-gray-900">Activity Log</h3>
           </div>
@@ -1469,7 +1469,7 @@ function AdminPage({ onNavigate }) {
                   log.type === 'error' ? 'border-l-red-500 bg-red-50' :
                   log.type === 'warning' ? 'border-l-yellow-500 bg-yellow-50' :
                   log.type === 'success' ? 'border-l-green-500 bg-green-50' :
-                  'border-l-blue-500 bg-blue-50'
+                  'border-l-accent-500 bg-accent-50'
                 }`}>
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-3">
@@ -1477,7 +1477,7 @@ function AdminPage({ onNavigate }) {
                         log.type === 'error' ? 'bg-red-200 text-red-800' :
                         log.type === 'warning' ? 'bg-yellow-200 text-yellow-800' :
                         log.type === 'success' ? 'bg-green-200 text-green-800' :
-                        'bg-blue-200 text-blue-800'
+                        'bg-accent-200 text-accent-800'
                       }`}>
                         {log.type.toUpperCase()}
                       </span>
@@ -1496,13 +1496,13 @@ function AdminPage({ onNavigate }) {
 
         {/* Delete Logs Confirmation Modal */}
         {showDeleteLogsModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+          <div className="fixed inset-0 bg-[var(--scrim)] flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
+            <div className="bg-white rounded-xl shadow-modal w-full max-w-md p-6">
               <div className="flex items-center space-x-3 mb-4">
                 <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
                   <Trash2 className="w-5 h-5 text-red-600" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900">Clear Old Logs</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Clear Old Logs</h3>
               </div>
               <p className="text-gray-600 mb-6">Delete audit logs older than 30 days? This action cannot be undone. Recent entries are always kept. Consider exporting logs first.</p>
               <div className="flex space-x-3">
@@ -1543,7 +1543,7 @@ function AdminPage({ onNavigate }) {
       <>
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Guest Accounts</h1>
+            <h1 className="text-3xl font-semibold text-gray-900">Guest Accounts</h1>
             <p className="text-gray-600 mt-1">Monitor and manage temporary guest accounts</p>
           </div>
           <div className="flex items-center space-x-3 self-start">
@@ -1569,26 +1569,26 @@ function AdminPage({ onNavigate }) {
 
         {/* Guest Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow-sm border p-4">
+          <div className="bg-white rounded-lg border p-4">
             <p className="text-sm text-gray-600">Total Guests</p>
-            <p className="text-2xl font-bold text-gray-900">{guestAccounts.total}</p>
+            <p className="text-2xl font-semibold text-gray-900">{guestAccounts.total}</p>
           </div>
-          <div className="bg-white rounded-lg shadow-sm border p-4">
+          <div className="bg-white rounded-lg border p-4">
             <p className="text-sm text-gray-600">Active (not expired)</p>
-            <p className="text-2xl font-bold text-green-600">{guestAccounts.total - guestAccounts.expired}</p>
+            <p className="text-2xl font-semibold text-green-600">{guestAccounts.total - guestAccounts.expired}</p>
           </div>
-          <div className="bg-white rounded-lg shadow-sm border p-4">
+          <div className="bg-white rounded-lg border p-4">
             <p className="text-sm text-gray-600">Expired</p>
-            <p className="text-2xl font-bold text-red-600">{guestAccounts.expired}</p>
+            <p className="text-2xl font-semibold text-red-600">{guestAccounts.expired}</p>
           </div>
         </div>
 
         {/* Info Banner */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-start space-x-3">
-          <Clock className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+        <div className="bg-accent-50 border border-accent-200 rounded-lg p-4 mb-6 flex items-start space-x-3">
+          <Clock className="w-5 h-5 text-accent-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-blue-900">Guest accounts expire after 30 days</p>
-            <p className="text-sm text-blue-700 mt-0.5">
+            <p className="text-sm font-medium text-accent-900">Guest accounts expire after 30 days</p>
+            <p className="text-sm text-accent-700 mt-0.5">
               Guest users are prompted to create a permanent account. Expired accounts and their boards
               can be deleted using the cleanup button above.
             </p>
@@ -1596,7 +1596,7 @@ function AdminPage({ onNavigate }) {
         </div>
 
         {/* Guest Accounts Table */}
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div className="bg-white rounded-xl border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px]">
               <thead className="bg-gray-50">
@@ -1708,21 +1708,21 @@ function AdminPage({ onNavigate }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-canvas">
       {/* Navigation Bar */}
-      <nav className="bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg relative z-40">
+      <nav className="bg-accent-600 text-white shadow-pop relative z-40">
         <div className="max-w-full mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-3">
               <Layout className="w-8 h-8" />
-              <span className="text-2xl font-bold">OpenCanvas</span>
+              <span className="text-2xl font-semibold">OpenCanvas</span>
               <span className="px-2 py-1 bg-white bg-opacity-20 rounded text-xs font-medium">Admin</span>
             </div>
             <div className="flex items-center space-x-4">
-              <button onClick={() => onNavigate('home')} className="hover:text-blue-200 transition">
+              <button onClick={() => onNavigate('home')} className="hover:text-accent-200 transition">
                 Exit Admin
               </button>
-              <div className="w-8 h-8 bg-white text-indigo-600 rounded-full flex items-center justify-center font-semibold">
+              <div className="w-8 h-8 bg-white text-accent-600 rounded-full flex items-center justify-center font-semibold">
                 {userInitials}
               </div>
             </div>
@@ -1737,8 +1737,8 @@ function AdminPage({ onNavigate }) {
             <div className={`flex items-center mb-6 ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
               {!sidebarCollapsed && (
                 <div className="flex items-center space-x-2">
-                  <Shield className="w-6 h-6 text-indigo-600" />
-                  <h2 className="text-lg font-bold text-gray-900">Admin Panel</h2>
+                  <Shield className="w-6 h-6 text-accent-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">Admin Panel</h2>
                 </div>
               )}
               <button
@@ -1757,7 +1757,7 @@ function AdminPage({ onNavigate }) {
                     sidebarCollapsed ? 'justify-center p-3' : 'space-x-3 px-3 py-3'
                   } ${
                     activeMenu === item.id
-                      ? 'bg-indigo-50 text-indigo-600'
+                      ? 'bg-accent-50 text-accent-600'
                       : 'text-gray-600 hover:bg-gray-50'
                   }`}
                   title={sidebarCollapsed ? item.label : ''}
@@ -1778,11 +1778,11 @@ function AdminPage({ onNavigate }) {
 
       {/* User Modal */}
       {showUserModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-[var(--scrim)] flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md">
             <div className="p-6 border-b">
               <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-gray-900">
+                <h3 className="text-xl font-semibold text-gray-900">
                   {showUserModal.mode === 'add' ? 'Add New User' : 'Edit User'}
                 </h3>
                 <button onClick={() => setShowUserModal(null)} className="p-1 hover:bg-gray-100 rounded">
@@ -1801,7 +1801,7 @@ function AdminPage({ onNavigate }) {
                     type="text"
                     value={userForm.first_name}
                     onChange={(e) => setUserForm({...userForm, first_name: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                   />
                 </div>
                 <div>
@@ -1810,7 +1810,7 @@ function AdminPage({ onNavigate }) {
                     type="text"
                     value={userForm.last_name}
                     onChange={(e) => setUserForm({...userForm, last_name: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                   />
                 </div>
               </div>
@@ -1820,7 +1820,7 @@ function AdminPage({ onNavigate }) {
                   type="text"
                   value={userForm.username}
                   onChange={(e) => setUserForm({...userForm, username: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                 />
               </div>
               <div>
@@ -1829,7 +1829,7 @@ function AdminPage({ onNavigate }) {
                   type="email"
                   value={userForm.email}
                   onChange={(e) => setUserForm({...userForm, email: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                 />
               </div>
               <div>
@@ -1837,7 +1837,7 @@ function AdminPage({ onNavigate }) {
                 <select
                   value={userForm.role}
                   onChange={(e) => setUserForm({...userForm, role: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                 >
                   <option value="student">Student</option>
                   <option value="lecturer">Lecturer</option>
@@ -1852,7 +1852,7 @@ function AdminPage({ onNavigate }) {
                   step="0.5"
                   value={userForm.storage_quota_gb}
                   onChange={(e) => setUserForm({...userForm, storage_quota_gb: parseFloat(e.target.value) || 5})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                 />
               </div>
               {showUserModal.mode === 'add' && (
@@ -1862,7 +1862,7 @@ function AdminPage({ onNavigate }) {
                     type="password"
                     value={userForm.password}
                     onChange={(e) => setUserForm({...userForm, password: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-2 border border-line-strong rounded-lg focus-visible:ring-2 focus-visible:ring-accent"
                     placeholder="Set initial password"
                   />
                 </div>
@@ -1878,7 +1878,7 @@ function AdminPage({ onNavigate }) {
               <button
                 onClick={handleSaveUser}
                 disabled={savingUser}
-                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium disabled:opacity-50"
+                className="flex-1 px-4 py-2 bg-accent-600 text-white rounded-lg hover:bg-accent-700 transition font-medium disabled:opacity-50"
               >
                 {savingUser ? 'Saving...' : (showUserModal.mode === 'add' ? 'Add User' : 'Save Changes')}
               </button>
@@ -1898,16 +1898,16 @@ function AdminPage({ onNavigate }) {
       )}
 
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-[var(--scrim)] flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-red-600">Delete User</h3>
+              <h3 className="text-xl font-semibold text-red-600">Delete User</h3>
               <button onClick={() => setShowDeleteModal(null)} className="p-1 hover:bg-gray-100 rounded">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <div className="flex items-center space-x-4 bg-red-50 p-4 rounded-lg mb-6">
-              <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium">
+              <div className="w-12 h-12 bg-accent-500 rounded-full flex items-center justify-center text-white font-medium">
                 {showDeleteModal.first_name && showDeleteModal.last_name
                   ? `${showDeleteModal.first_name[0]}${showDeleteModal.last_name[0]}`
                   : showDeleteModal.username?.[0]?.toUpperCase() || '?'}
@@ -1944,10 +1944,10 @@ function AdminPage({ onNavigate }) {
 
       {/* Bulk Delete Modal */}
       {showBulkDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-backdropFade">
+        <div className="fixed inset-0 bg-[var(--scrim)] flex items-center justify-center z-50 p-4 animate-backdropFade">
           <div className="bg-white rounded-xl w-full max-w-md p-6 animate-scaleIn">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-red-600">Delete {selectedUsers.size} Users</h3>
+              <h3 className="text-xl font-semibold text-red-600">Delete {selectedUsers.size} Users</h3>
               <button onClick={() => setShowBulkDeleteModal(false)} className="p-1 hover:bg-gray-100 rounded">
                 <X className="w-5 h-5 text-gray-500" />
               </button>

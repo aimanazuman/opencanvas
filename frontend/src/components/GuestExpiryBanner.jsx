@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Clock, X, UserPlus, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import GuestRegistrationModal from './GuestRegistrationModal';
+import { StickyNote } from './classroom';
+
+// Sticky-note colour and icon colour per urgency. Static lookups so Tailwind keeps every class.
+// The message text and icon carry the urgency; colour is never the only signal.
+const NOTE_BY_LEVEL = { normal: 'azure', urgent: 'amber', critical: 'orange' };
+const ICON_BY_LEVEL = { normal: 'text-accent', urgent: 'text-warning', critical: 'text-danger' };
 
 const GuestExpiryBanner = () => {
   const { user, isGuest } = useAuth();
@@ -29,26 +35,19 @@ const GuestExpiryBanner = () => {
 
   const isUrgent = daysRemaining <= 7;
   const isCritical = daysRemaining <= 3;
-
-  const bgColor = isCritical
-    ? 'bg-red-600'
-    : isUrgent
-    ? 'bg-amber-500'
-    : 'bg-blue-600';
-
-  const textColor = 'text-white';
+  const level = isCritical ? 'critical' : isUrgent ? 'urgent' : 'normal';
 
   return (
     <>
-      <div className={`${bgColor} ${textColor} px-4 py-3 relative z-50`}>
-        <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center space-x-3">
+      <StickyNote color={NOTE_BY_LEVEL[level]} className="relative z-50 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
             {isCritical ? (
-              <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+              <AlertTriangle className={`h-5 w-5 flex-shrink-0 ${ICON_BY_LEVEL[level]}`} strokeWidth={1.5} aria-hidden="true" />
             ) : (
-              <Clock className="w-5 h-5 flex-shrink-0" />
+              <Clock className={`h-5 w-5 flex-shrink-0 ${ICON_BY_LEVEL[level]}`} strokeWidth={1.5} aria-hidden="true" />
             )}
-            <p className="text-sm font-medium">
+            <p className="text-sm font-medium text-ink">
               {daysRemaining === 0 ? (
                 'Your guest account expires today! Create an account now to keep your boards.'
               ) : daysRemaining === 1 ? (
@@ -56,30 +55,32 @@ const GuestExpiryBanner = () => {
               ) : (
                 <>
                   Your guest account will be deleted in{' '}
-                  <span className="font-bold">{daysRemaining} days</span>.
+                  <span className="font-semibold">{daysRemaining} days</span>.
                   Create an account to make it permanent.
                 </>
               )}
             </p>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => setShowModal(true)}
-              className="bg-white text-gray-900 px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-gray-100 transition flex items-center space-x-1.5"
+              className="btn-motion inline-flex min-h-[44px] items-center gap-1.5 rounded bg-chalk-board px-4 text-sm font-semibold text-chalk-ink hover:bg-chalk-deep"
             >
-              <UserPlus className="w-4 h-4" />
+              <UserPlus className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
               <span>Create Account</span>
             </button>
             <button
+              type="button"
               onClick={() => setDismissed(true)}
-              className="p-1 hover:bg-white/20 rounded transition"
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded p-1 text-ink hover:bg-black/10"
               aria-label="Dismiss banner"
             >
-              <X className="w-4 h-4" />
+              <X className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
             </button>
           </div>
         </div>
-      </div>
+      </StickyNote>
 
       <GuestRegistrationModal
         isOpen={showModal}

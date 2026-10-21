@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
 import { Edit3, Trash2, Check } from 'lucide-react';
+import { ClassroomButton } from '../../classroom';
+
+// Icon-only block actions: 44 px on phones, 32 px on desktop. The title attribute is the accessible name.
+const ICON_BTN = 'btn-motion flex h-11 w-11 items-center justify-center rounded bg-surface border border-line text-ink-2 hover:bg-surface-hover md:h-8 md:w-8';
 
 export default function TextBlock({ block, canEdit, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
@@ -21,26 +25,20 @@ export default function TextBlock({ block, canEdit, onUpdate, onDelete }) {
     return (
       <div className="relative">
         <textarea
+          aria-label="Text content"
           value={content}
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-full min-h-[120px] p-3 border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y text-gray-800"
+          className="w-full min-h-[120px] p-3 rounded-lg border-2 border-accent bg-surface text-ink resize-y focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           autoFocus
         />
-        <div className="flex justify-end mt-2 space-x-2">
-          <button
-            onClick={() => { setContent(block.content || ''); setEditing(false); }}
-            className="px-3 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded"
-          >
+        <div className="flex justify-end mt-2 gap-2">
+          <ClassroomButton variant="ghost" onClick={() => { setContent(block.content || ''); setEditing(false); }}>
             Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 flex items-center space-x-1"
-          >
-            <Check className="w-3 h-3" />
-            <span>Save</span>
-          </button>
+          </ClassroomButton>
+          <ClassroomButton variant="primary" icon={Check} onClick={handleSave}>
+            Save
+          </ClassroomButton>
         </div>
       </div>
     );
@@ -48,24 +46,16 @@ export default function TextBlock({ block, canEdit, onUpdate, onDelete }) {
 
   return (
     <div className="group relative">
-      <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">
-        {block.content || <span className="text-gray-400 italic">Empty text block</span>}
+      <div className="whitespace-pre-wrap text-ink leading-relaxed">
+        {block.content || <span className="text-ink-3 italic">Empty text block</span>}
       </div>
       {canEdit && (
-        <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition flex space-x-1">
-          <button
-            onClick={() => setEditing(true)}
-            className="p-1 bg-white border rounded shadow-sm hover:bg-gray-50"
-            title="Edit"
-          >
-            <Edit3 className="w-3.5 h-3.5 text-gray-500" />
+        <div className="absolute top-0 right-0 flex gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+          <button type="button" onClick={() => setEditing(true)} className={ICON_BTN} title="Edit" aria-label="Edit">
+            <Edit3 className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
           </button>
-          <button
-            onClick={onDelete}
-            className="p-1 bg-white border rounded shadow-sm hover:bg-red-50"
-            title="Delete"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+          <button type="button" onClick={onDelete} className={`${ICON_BTN} hover:text-danger`} title="Delete" aria-label="Delete">
+            <Trash2 className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
           </button>
         </div>
       )}

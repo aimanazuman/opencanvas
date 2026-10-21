@@ -38,7 +38,7 @@ export default function BlockRenderer({ block, canEdit, canSubmit, onUpdate, onD
       return <GoogleMeetBlock block={block} canEdit={canEdit} onUpdate={onUpdate} onDelete={onDelete} />;
     default:
       return (
-        <div className="p-3 bg-gray-100 rounded-lg text-sm text-gray-500">
+        <div className="rounded-lg border border-line bg-surface p-3 text-sm text-ink-2">
           Unknown block type: {block.type}
         </div>
       );

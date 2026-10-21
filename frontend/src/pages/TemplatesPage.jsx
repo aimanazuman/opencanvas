@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Layout, Search, X, Plus, BookOpen, Calendar, Lightbulb, ChevronRight, Info, HelpCircle } from 'lucide-react';
+import { Layout, Search, X, Plus, BookOpen, Calendar, Lightbulb, Info, HelpCircle } from 'lucide-react';
 import Navigation from '../components/Navigation';
+import {
+  ClassroomShell, ChalkboardHeader, ClassroomButton, PaperPanel, StickyNote, WoodFrame, CorkBoard,
+} from '../components/classroom';
 import { getTemplatesForRole } from '../utils/templateDefinitions';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -21,6 +24,15 @@ const TEMPLATE_ROUTES = {
   'quiz': 'templates-quiz',
 };
 
+// Static lookup: the note colour per template. Only azure, teal, green, amber, orange (and slate elsewhere).
+const TEMPLATE_NOTE = {
+  'course-material': 'azure',
+  'student-notes': 'green',
+  'study-planner': 'teal',
+  'kanban': 'amber',
+  'quiz': 'orange',
+};
+
 const TemplatesPage = ({ onNavigate, hideNav = false }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const { user } = useAuth();
@@ -35,20 +47,11 @@ const TemplatesPage = ({ onNavigate, hideNav = false }) => {
     icon: TEMPLATE_ICONS[t.id] || Layout,
   }));
 
+  const query = searchQuery.toLowerCase();
   const filteredTemplates = templates.filter(template =>
-    template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    template.description.toLowerCase().includes(searchQuery.toLowerCase())
+    template.name.toLowerCase().includes(query) ||
+    template.description.toLowerCase().includes(query)
   );
-
-  const getColorClasses = (color) => {
-    const colors = {
-      indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600', border: 'border-indigo-200', hover: 'hover:border-indigo-400' },
-      emerald: { bg: 'bg-emerald-100', text: 'text-emerald-600', border: 'border-emerald-200', hover: 'hover:border-emerald-400' },
-      teal: { bg: 'bg-teal-100', text: 'text-teal-600', border: 'border-teal-200', hover: 'hover:border-teal-400' },
-      cyan: { bg: 'bg-cyan-100', text: 'text-cyan-600', border: 'border-cyan-200', hover: 'hover:border-cyan-400' },
-    };
-    return colors[color] || colors.indigo;
-  };
 
   const handleUseTemplate = (template) => {
     const params = { templateType: template.id };
@@ -57,120 +60,133 @@ const TemplatesPage = ({ onNavigate, hideNav = false }) => {
     onNavigate('workspace', params);
   };
 
-  return (
-    <div className={hideNav ? '' : 'min-h-screen bg-gray-50'}>
-      {!hideNav && <Navigation onNavigate={onNavigate} currentPage="templates" />}
-      <div className={hideNav ? '' : 'max-w-7xl mx-auto px-4 py-8'}>
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Board Templates</h1>
-            <p className="text-gray-600 mt-1">Start quickly with pre-designed layouts, or browse your boards by type</p>
-          </div>
-          <button
-            onClick={() => {
-              const params = {};
-              if (courseId) params.courseId = courseId;
-              if (section) params.section = section;
-              onNavigate('workspace', params);
-            }}
-            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition flex items-center space-x-2"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Blank Board</span>
-          </button>
-        </div>
+  const handleBlankBoard = () => {
+    const params = {};
+    if (courseId) params.courseId = courseId;
+    if (section) params.section = section;
+    onNavigate('workspace', params);
+  };
 
-        {/* Course context banner */}
+  const Content = hideNav ? 'div' : 'main';
+
+  return (
+    <ClassroomShell embedded={hideNav}>
+      {!hideNav && <Navigation onNavigate={onNavigate} currentPage="templates" />}
+      <Content
+        aria-labelledby="templates-title"
+        className={hideNav ? 'space-y-6' : 'mx-auto max-w-6xl space-y-6 px-4 py-6 md:py-8'}
+      >
+        <ChalkboardHeader
+          size="banner"
+          underline
+          titleId="templates-title"
+          title="Board Templates"
+          subtitle="Start quickly with pre-designed layouts, or browse your boards by type"
+          actions={
+            <ClassroomButton onChalk icon={Plus} onClick={handleBlankBoard}>Blank Board</ClassroomButton>
+          }
+        />
+
+        {/* Course context: white panel, not a board or cork. */}
         {courseId && (
-          <div className="mb-6 flex items-center space-x-3 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-lg">
-            <Info className="w-5 h-5 text-indigo-600 flex-shrink-0" />
-            <p className="text-sm text-indigo-700">
+          <PaperPanel tone="white" padded={false} className="flex items-start gap-3 p-4">
+            <Info className="mt-0.5 h-5 w-5 flex-none text-accent-600" strokeWidth={1.5} aria-hidden="true" />
+            <p className="text-sm text-ink">
               Creating board for <span className="font-semibold">{courseName || `Course #${courseId}`}</span>
               {section && <> / <span className="font-semibold">Section {section}</span></>}
               . Choose a template below.
             </p>
-          </div>
+          </PaperPanel>
         )}
 
-        {/* Search Bar */}
-        <div className="mb-6">
+        {/* Search is user input: white panel, never ruled paper or cork. */}
+        <PaperPanel tone="white" padded={false} className="p-3">
           <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-2" strokeWidth={1.5} aria-hidden="true" />
+            <label htmlFor="templates-search" className="sr-only">Search templates</label>
             <input
+              id="templates-search"
               type="text"
               placeholder="Search templates..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="min-h-[44px] w-full rounded border border-line-strong py-2 pl-10 pr-11 text-ink"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                <X className="h-5 w-5" />
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded hover:bg-surface-hover"
+              >
+                <X className="h-5 w-5 text-ink-2" strokeWidth={1.5} aria-hidden="true" />
               </button>
             )}
           </div>
-        </div>
+        </PaperPanel>
 
-        {filteredTemplates.length > 0 ? (
-          <div className="grid md:grid-cols-2 gap-6">
-            {filteredTemplates.map(template => {
-              const Icon = template.icon;
-              const colors = getColorClasses(template.color);
-              const routeKey = TEMPLATE_ROUTES[template.id];
-              return (
-                <div
-                  key={template.id}
-                  className={`bg-white rounded-xl shadow-sm border ${colors.border} ${colors.hover} hover:shadow-md transition group`}
-                >
-                  <div className="p-6">
-                    <div className="flex items-start space-x-4">
-                      <div className={`w-14 h-14 ${colors.bg} rounded-xl flex items-center justify-center flex-shrink-0`}>
-                        <Icon className={`w-7 h-7 ${colors.text}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-lg font-bold text-gray-900 mb-1">{template.name}</h3>
-                        <p className="text-sm text-gray-600 mb-3">{template.description}</p>
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {template.features.map((feature, i) => (
-                            <span key={i} className={`text-xs ${colors.bg} ${colors.text} px-2 py-0.5 rounded-full`}>
+        <section aria-labelledby="templates-gallery-title" className="space-y-3">
+          {/* Heading sits on the wall, above the cork. Text on cork is never allowed. */}
+          <h2 id="templates-gallery-title" className="font-hand text-xl text-ink md:text-2xl">
+            Choose a template
+          </h2>
+
+          {filteredTemplates.length > 0 ? (
+            <WoodFrame>
+              <CorkBoard as="div" padded={false} layout="three" className="p-4 md:p-6">
+                {filteredTemplates.map((template, idx) => {
+                  const Icon = template.icon;
+                  const routeKey = TEMPLATE_ROUTES[template.id];
+                  const titleId = `template-${template.id}-title`;
+                  return (
+                    <li key={template.id}>
+                      <StickyNote
+                        as="article"
+                        aria-labelledby={titleId}
+                        color={TEMPLATE_NOTE[template.id] || 'azure'}
+                        rotate={idx % 2 === 0 ? -2 : 2}
+                        decorative
+                        pinned
+                        spacious
+                        className="lift h-full"
+                      >
+                        <Icon className="mb-3 h-6 w-6 text-ink" strokeWidth={1.5} aria-hidden="true" />
+                        <h3 id={titleId} className="text-base font-semibold text-ink">{template.name}</h3>
+                        <p className="mt-1 text-sm leading-relaxed text-ink">{template.description}</p>
+                        <ul aria-label={`${template.name} features`} className="mt-3 flex flex-wrap gap-1.5">
+                          {template.features.map(feature => (
+                            <li key={feature} className="rounded-full bg-white px-2 py-0.5 text-xs text-ink">
                               {feature}
-                            </span>
+                            </li>
                           ))}
+                        </ul>
+                        <div className="mt-auto flex flex-col gap-2 pt-4 sm:flex-row">
+                          <ClassroomButton className="flex-1" onClick={() => onNavigate(routeKey)}>
+                            View Boards<span className="sr-only"> for {template.name}</span>
+                          </ClassroomButton>
+                          <ClassroomButton variant="primary" className="flex-1" onClick={() => handleUseTemplate(template)}>
+                            Create New<span className="sr-only"> {template.name}</span>
+                          </ClassroomButton>
                         </div>
-                      </div>
-                    </div>
-                    <div className="flex space-x-2 mt-2">
-                      <button
-                        onClick={() => onNavigate(routeKey)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium text-sm flex items-center justify-center space-x-1"
-                      >
-                        <span>View Boards</span>
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleUseTemplate(template)}
-                        className={`flex-1 px-3 py-2 ${colors.bg} ${colors.text} rounded-lg transition font-medium text-sm hover:opacity-80`}
-                      >
-                        Create New
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-16">
-            <Layout className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No templates found</h3>
-            <p className="text-gray-500 mb-6">Try adjusting your search</p>
-            <button onClick={() => setSearchQuery('')} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
-              Show All Templates
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+                      </StickyNote>
+                    </li>
+                  );
+                })}
+              </CorkBoard>
+            </WoodFrame>
+          ) : (
+            <StickyNote color="azure" className="mx-auto max-w-sm items-center text-center">
+              <Layout className="mb-2 h-5 w-5 text-ink" strokeWidth={1.5} aria-hidden="true" />
+              <h3 className="text-base font-semibold text-ink">No templates found</h3>
+              <p className="mt-1 text-sm text-ink">Try adjusting your search</p>
+              <ClassroomButton variant="primary" className="mt-4" onClick={() => setSearchQuery('')}>
+                Show All Templates
+              </ClassroomButton>
+            </StickyNote>
+          )}
+        </section>
+      </Content>
+    </ClassroomShell>
   );
 };
 

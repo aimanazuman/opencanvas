@@ -6,6 +6,7 @@ import { createKanbanColumn } from '../../utils/boardHelpers';
 import KanbanCard from './kanban/KanbanCard';
 import KanbanAddCard from './kanban/KanbanAddCard';
 import KanbanCardDetail from './kanban/KanbanCardDetail';
+import { ClassroomButton } from '../classroom';
 
 
 export default function KanbanBoard() {
@@ -142,18 +143,23 @@ export default function KanbanBoard() {
     }
   };
 
+  // Column titles use the UI font, the same as the rename input, so double-clicking does not change the font.
+  const titleFont = () => 'text-sm font-semibold';
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
     <div className="flex-1 flex overflow-x-auto px-4 py-6 space-x-4">
       {columns.map(column => (
-        <div key={column.id} className="flex-shrink-0 w-80 bg-gray-100 rounded-xl flex flex-col max-h-[calc(100vh-160px)] group/col">
+        // Wood-toned top edge marks the lane; the lane and its white cards stay flat.
+        <div key={column.id} className="flex-shrink-0 w-80 bg-surface-hover border border-line border-t-2 border-t-wood rounded-xl flex flex-col max-h-[calc(100vh-160px)] group/col">
           {/* Column Header */}
           <div className="px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center space-x-2 flex-1 min-w-0">
-              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: column.color }} />
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: column.color }} aria-hidden="true" />
               {editingColumnId === column.id ? (
                 <input
                   type="text"
+                  aria-label="Column name"
                   value={editColumnTitle}
                   onChange={(e) => setEditColumnTitle(e.target.value)}
                   onKeyDown={(e) => {
@@ -161,12 +167,12 @@ export default function KanbanBoard() {
                     if (e.key === 'Escape') setEditingColumnId(null);
                   }}
                   onBlur={() => handleRenameColumn(column.id)}
-                  className="font-semibold text-gray-900 bg-white border rounded px-1 py-0.5 text-sm flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="font-semibold text-ink bg-surface border border-line-strong rounded px-1 py-0.5 text-sm flex-1 min-w-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   autoFocus
                 />
               ) : (
                 <h3
-                  className={`font-semibold text-gray-900 truncate ${canManageColumns ? 'cursor-pointer hover:text-indigo-600' : ''}`}
+                  className={`${titleFont()} text-ink truncate ${canManageColumns ? 'cursor-pointer hover:text-accent' : ''}`}
                   onDoubleClick={() => {
                     if (canManageColumns) {
                       setEditingColumnId(column.id);
@@ -177,34 +183,41 @@ export default function KanbanBoard() {
                   {column.title}
                 </h3>
               )}
-              <span className="text-xs text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded-full flex-shrink-0">{column.cards.length}</span>
+              <span className="text-xs text-ink-2 bg-surface border border-line px-1.5 py-0.5 rounded-full flex-shrink-0">{column.cards.length}</span>
             </div>
             {canManageColumns && (
               <div className="relative">
                 <button
+                  type="button"
                   onClick={() => setColumnMenuOpen(columnMenuOpen === column.id ? null : column.id)}
-                  className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded opacity-0 group-hover/col:opacity-100 transition"
+                  className="btn-motion p-2 text-ink-2 hover:text-ink hover:bg-line rounded opacity-0 group-hover/col:opacity-100 focus-visible:opacity-100"
+                  title={`Column menu for ${column.title}`}
+                  aria-label={`Column menu for ${column.title}`}
+                  aria-haspopup="true"
+                  aria-expanded={columnMenuOpen === column.id}
                 >
-                  <MoreVertical className="w-4 h-4" />
+                  <MoreVertical className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
                 </button>
                 {columnMenuOpen === column.id && (
-                  <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border py-1 z-50 w-40">
+                  <div className="absolute right-0 top-full mt-1 bg-surface rounded-lg shadow-pop border border-line py-1 z-50 w-40">
                     <button
+                      type="button"
                       onClick={() => {
                         setEditingColumnId(column.id);
                         setEditColumnTitle(column.title);
                         setColumnMenuOpen(null);
                       }}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center space-x-2"
+                      className="btn-motion w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-hover flex items-center gap-2"
                     >
-                      <Edit3 className="w-4 h-4" />
+                      <Edit3 className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
                       <span>Rename</span>
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleDeleteColumn(column.id)}
-                      className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                      className="btn-motion w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger-tint flex items-center gap-2"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4" strokeWidth={1.5} aria-hidden="true" />
                       <span>Delete</span>
                     </button>
                   </div>
@@ -239,29 +252,26 @@ export default function KanbanBoard() {
       {/* Add Column */}
       {canManageColumns && (
         addingColumn ? (
-          <div className="flex-shrink-0 w-80 bg-gray-100 rounded-xl p-4 space-y-3">
+          <div className="flex-shrink-0 w-80 bg-surface border border-line rounded-xl p-4 space-y-3">
             <input
               type="text"
+              aria-label="New column title"
               value={newColumnTitle}
               onChange={(e) => setNewColumnTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()}
               placeholder="Column title..."
-              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 rounded border border-line-strong bg-surface text-sm text-ink placeholder:text-ink-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               autoFocus
             />
-            <div className="flex space-x-2">
-              <button onClick={handleAddColumn} className="px-3 py-1.5 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700">Add Column</button>
-              <button onClick={() => { setAddingColumn(false); setNewColumnTitle(''); }} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded">Cancel</button>
+            <div className="flex gap-2">
+              <ClassroomButton variant="primary" onClick={handleAddColumn}>Add Column</ClassroomButton>
+              <ClassroomButton variant="ghost" onClick={() => { setAddingColumn(false); setNewColumnTitle(''); }}>Cancel</ClassroomButton>
             </div>
           </div>
         ) : (
-          <button
-            onClick={() => setAddingColumn(true)}
-            className="flex-shrink-0 w-80 h-12 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center justify-center text-sm text-gray-600 transition"
-          >
-            <Plus className="w-4 h-4 mr-1" />
+          <ClassroomButton variant="secondary" icon={Plus} onClick={() => setAddingColumn(true)} className="flex-shrink-0 w-80">
             Add Column
-          </button>
+          </ClassroomButton>
         )
       )}
 
