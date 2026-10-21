@@ -118,7 +118,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 
 On the first start MySQL creates the database `opencanvas_db`, and the script `db/init/10-create-app-user.sh` creates the user `opencanvas_app`, which can reach `opencanvas_db` only (no other database, no administration rights). The backend then applies the migrations and starts. The first start takes a minute or two.
 
-Create the first admin user in the application (this is a Django matter; for example `docker compose --env-file .env.prod -f docker-compose.prod.yml exec oc-backend python manage.py createsuperuser`).
+Create the first admin user once the backend has started and migrated, with the reviewed command described in "First admin" below. Do not use `createsuperuser` (it leaves the role at `student`).
 
 Shortcut for the commands below (add it to `~/.bashrc` to keep it):
 
@@ -161,6 +161,23 @@ Restore into an empty database (after the stack is up):
 gunzip -c ~/backups/opencanvas-db-YYYY-MM-DD.sql.gz | docker exec -i oc-db sh -c 'MYSQL_PWD="$(cat /run/secrets/db_root_password)" mysql -uroot opencanvas_db'
 ```
 
+## Storage counters
+
+Each user's `storage_used` is a stored counter. Files count against the user who uploaded them, and a board's content counts against its owner, unless the board is archived. The `recalculate_storage` command recomputes every counter from the rows. Without `--apply` it only prints the users whose stored value differs (old, new, delta) and changes nothing.
+
+```bash
+# 1. dry run: lists the users whose stored value differs. Changes nothing.
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec oc-backend python manage.py recalculate_storage
+# 2. write the recalculated values (one locked transaction per user)
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec oc-backend python manage.py recalculate_storage --apply
+# 3. optional: list board files that no board content or version refers to. Listing only, nothing is deleted.
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec oc-backend python manage.py recalculate_storage --report-orphans
+```
+
+- Take a database dump first (see Backups) before `--apply`, and run it when few people are editing: the per-user lock protects each counter, but a board edit that commits while the command reads that user's boards is only counted on the next run.
+- The orphan report looks for each stored file name in the content and versions of every board. A file that a board refers to in another form shows up in the list, so check each file before removing anything. Files that are not attached to a board are never listed.
+- Storage limits set in the admin settings are in GB. `defaultStorageQuota` must be above 0 and at most 10240 (10 TiB). `systemStorageLimit` is optional: an empty value or 0 means no system-wide limit. Other values are refused with HTTP 400.
+
 ## Updating
 
 ```bash
@@ -198,6 +215,22 @@ Do not copy the old `mysql` folder into the new one: the database moved from MyS
 
 If you ever need to create the application user on an existing database by hand: `docker exec oc-db bash /docker-entrypoint-initdb.d/10-create-app-user.sh` (safe to repeat; it also resets the user's password to the current `db_app_password.txt`).
 
+## First admin
+
+The first admin is created by the management command `create_admin`, run once in a short-lived container. The password is never typed on the command line, never stored in a file of this repository and never in the environment: it is either read from a file you name with `--password-file`, or typed at a hidden prompt twice.
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm --no-deps \
+  --label traefik.enable=false --entrypoint python oc-backend manage.py create_admin --email you@example.com
+```
+
+- `--entrypoint python` is needed because the production image starts `entrypoint.prod.sh` (migrations, then gunicorn) by default. `--label traefik.enable=false` keeps Traefik from sending public traffic to the one-off container.
+- The username defaults to `oc_admin`; choose another with `--username your_name`.
+- The account is created with role `admin`, staff and superuser flags, and a verified email.
+- Running it again on the same admin changes nothing and says so. An existing account with another role is promoted only together with a new password (the hidden prompt again).
+- Lost admin password: add `--reset-password`. It replaces the password and signs that account out everywhere.
+- A password file also works (`--password-file /path/in/the/container`), but the production compose file does not mount one. Mount it only if you add the secret yourself, and keep it outside the repository.
+
 ## Standalone Traefik (only for a server WITHOUT a shared Traefik)
 
 For people who clone this repository onto a server that has no Traefik. **Not for the owner's VPS**, where the shared Traefik already owns ports 80 and 443.
@@ -213,3 +246,32 @@ The overlay adds a Traefik container with the Docker socket mounted read-only. T
 ## Development
 
 `docker-compose.yml` is for a local computer: all ports are bound to `127.0.0.1`, the database is a throwaway MySQL with a dev-only password (see `.env.dev.example`), and nothing in it is used in production.
+
+### Local database and uploads
+
+The development database is a bind mount: its files live in `./data/dev/mysql` on your PC, and uploads live in `./data/dev/uploads`. The `data/` folder is git-ignored. Before this change the database was in the Docker named volume `dev_db_data`. The stack no longer uses that volume: MySQL starts on the empty `./data/dev/mysql` folder, so the old data is not visible until you restore it.
+
+To keep the old data, dump it while the previous `docker-compose.yml` still runs, before you start this version. Run these two commands in a POSIX shell such as Git Bash: the `<` and `>` redirects are written for that shell, and PowerShell handles them differently. The dump goes into `data/`, which is git-ignored (`.gitignore` does not cover `*.sql`, so do not write it anywhere else in the repository):
+
+```bash
+docker compose exec -T db sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" opencanvas_db' > data/dev-backup.sql
+```
+
+To load it into the new database, once the new stack has started and the database is up:
+
+```bash
+docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" opencanvas_db' < data/dev-backup.sql
+```
+
+The old volume is not removed by this change. `docker volume ls` shows it, and you can delete it yourself once you have checked the restore.
+
+### Demo accounts for local development
+
+The variables `DEV_SEED_ADMIN_*`, `DEV_SEED_LECTURER_*` and `DEV_SEED_STUDENT_*` (username, email, password each) in `.env.dev` describe demo accounts. Every backend start runs `python manage.py seed_dev_users`, which creates or updates them: the role is set, the email is marked verified, and the password is written only when it changed. Re-running changes nothing else. The values in `.env.dev.example` are throwaway and marked DEV ONLY.
+
+```bash
+cp .env.dev.example .env.dev         # the demo accounts are on by default; clear a role's three values to skip it
+docker compose --env-file .env.dev up
+```
+
+Without `--env-file .env.dev` the variables are empty and nothing is created. The command refuses to run when `DEBUG` is off or when a production setting is present (`DB_PASSWORD_FILE`, `SECRET_KEY_FILE`, `JWT_SIGNING_KEY_FILE`, `EMAIL_HOST_PASSWORD_FILE`, or `OC_ENVIRONMENT=production`). The production compose file sets those, so the demo accounts cannot be created there. Passwords are never printed.

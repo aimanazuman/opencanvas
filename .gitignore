@@ -40,6 +40,9 @@ secrets/
 *.p12
 acme.json
 
+# Local development data (database files and uploads)
+data/
+
 # IDE
 .vscode/
 .idea/

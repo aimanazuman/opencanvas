@@ -13,23 +13,29 @@ services:
       MYSQL_ROOT_PASSWORD: ${OC_DEV_DB_ROOT_PASSWORD:-dev-only-root-not-a-secret}
       MYSQL_DATABASE: opencanvas_db
     volumes:
-      - dev_db_data:/var/lib/mysql
+      - ./data/dev/mysql:/var/lib/mysql
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping --silent -h 127.0.0.1"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
-    # Not published: the backend reaches it over the compose network. To use a desktop client, add
-    # "127.0.0.1:3307:3306" under ports.
+    # Published on this PC only (127.0.0.1), so a desktop client such as DBeaver can connect to localhost:3307.
+    ports:
+      - "127.0.0.1:3307:3306"
 
   backend:
     build: ./backend
+    # seed_dev_users creates or updates the demo accounts named in .env.dev (DEV_SEED_*). With those variables empty it
+    # does nothing. It refuses to run unless DEBUG is on, so it can never run in production.
     command: >
       sh -c "python manage.py migrate &&
+             python manage.py seed_dev_users &&
              python manage.py runserver 0.0.0.0:8000"
     volumes:
       - ./backend:/app
+      # Uploaded files (photos, videos, documents) land here on your PC instead of inside ./backend.
+      - ./data/dev/uploads:/app/media
     ports:
       - "127.0.0.1:8000:8000"
     environment:
@@ -43,6 +49,16 @@ services:
       - DB_PORT=3306
       - EMAIL_HOST=mailhog
       - EMAIL_PORT=1025
+      # Optional demo accounts (DEV ONLY, read from .env.dev through the --env-file option; empty values create nothing).
+      - DEV_SEED_ADMIN_USERNAME=${DEV_SEED_ADMIN_USERNAME:-}
+      - DEV_SEED_ADMIN_EMAIL=${DEV_SEED_ADMIN_EMAIL:-}
+      - DEV_SEED_ADMIN_PASSWORD=${DEV_SEED_ADMIN_PASSWORD:-}
+      - DEV_SEED_LECTURER_USERNAME=${DEV_SEED_LECTURER_USERNAME:-}
+      - DEV_SEED_LECTURER_EMAIL=${DEV_SEED_LECTURER_EMAIL:-}
+      - DEV_SEED_LECTURER_PASSWORD=${DEV_SEED_LECTURER_PASSWORD:-}
+      - DEV_SEED_STUDENT_USERNAME=${DEV_SEED_STUDENT_USERNAME:-}
+      - DEV_SEED_STUDENT_EMAIL=${DEV_SEED_STUDENT_EMAIL:-}
+      - DEV_SEED_STUDENT_PASSWORD=${DEV_SEED_STUDENT_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
@@ -74,4 +90,3 @@ services:
 
 volumes:
   frontend_node_modules:
-  dev_db_data:
