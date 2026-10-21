@@ -15,7 +15,10 @@ from django.utils.http import urlsafe_base64_encode
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from django.test import SimpleTestCase
+
 from apps.accounts.models import AuditLog, Institution, SystemSettings
+from apps.files.storage import GB, MAX_STORAGE_GB, quota_bytes_from_setting, storage_gb_setting, validate_storage_gb
 from apps.testutils import BaseAPITestCase, PASSWORD, make_user, png_bytes
 
 User = get_user_model()
@@ -349,6 +352,86 @@ class SystemSettingsAndMaintenanceTests(BaseAPITestCase):
         a.credentials(HTTP_AUTHORIZATION='Bearer ' + str(RefreshToken.for_user(self.admin).access_token))
         self.assertEqual(a.get('/api/accounts/settings/').status_code, 200)
         del blocked
+
+
+class StorageSettingValidationTests(BaseAPITestCase):
+    """defaultStorageQuota and systemStorageLimit are GB numbers: finite, above zero, at most 10 TiB."""
+
+    def setUp(self):
+        super().setUp()
+        self.admin = make_user('quotaadmin', role='admin')
+        self.admin_client = self.as_user(self.admin)
+
+    def test_invalid_default_quota_is_refused_and_not_saved(self):
+        for bad in ('abc', '0', '-1', 'nan', 'inf', '1e400', '10241', '', True):
+            response = self.admin_client.put('/api/accounts/settings/', {'defaultStorageQuota': bad}, format='json')
+            self.assertEqual(response.status_code, 400, bad)
+        self.assertFalse(SystemSettings.objects.filter(key='defaultStorageQuota').exists())
+
+    def test_invalid_system_limit_is_refused(self):
+        for bad in ('lots', '-5', 'nan', '10241', 'inf'):
+            response = self.admin_client.put('/api/accounts/settings/', {'systemStorageLimit': bad}, format='json')
+            self.assertEqual(response.status_code, 400, bad)
+        self.assertFalse(SystemSettings.objects.filter(key='systemStorageLimit').exists())
+
+    def test_valid_values_are_accepted(self):
+        for key, good in (('defaultStorageQuota', '5'), ('defaultStorageQuota', '0.5'),
+                          ('defaultStorageQuota', '10240'), ('systemStorageLimit', ''),
+                          ('systemStorageLimit', '0'), ('systemStorageLimit', '100')):
+            response = self.admin_client.put('/api/accounts/settings/', {key: good}, format='json')
+            self.assertEqual(response.status_code, 200, (key, good, response.content))
+
+    def test_a_bad_value_saves_none_of_the_settings_in_the_same_request(self):
+        response = self.admin_client.put('/api/accounts/settings/',
+                                         {'siteName': 'Changed', 'defaultStorageQuota': 'lots'}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertNotEqual(SystemSettings.get_all_settings().get('siteName'), 'Changed')
+
+
+class StorageSettingReaderTests(BaseAPITestCase):
+    """Stored values that are unusable fall back to the model default (5 GB) and never overflow."""
+
+    DEFAULT = 5368709120
+
+    def _new_guest_quota(self):
+        response = self.client.post('/api/accounts/guest/', {}, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        return User.objects.order_by('-id').first().storage_quota
+
+    def test_guest_gets_the_model_default_when_the_setting_is_unusable(self):
+        for raw in ('nan', 'inf', '-3', '0', 'abc', ''):
+            SystemSettings.set_setting('defaultStorageQuota', raw)
+            self.assertEqual(self._new_guest_quota(), self.DEFAULT, raw)
+
+    def test_guest_gets_a_valid_setting(self):
+        SystemSettings.set_setting('defaultStorageQuota', '2')
+        self.assertEqual(self._new_guest_quota(), 2 * GB)
+
+    def test_a_huge_stored_value_is_capped_at_the_ceiling_not_overflowed(self):
+        SystemSettings.set_setting('defaultStorageQuota', '1e308')
+        self.assertEqual(self._new_guest_quota(), MAX_STORAGE_GB * GB)
+
+
+class StorageGbHelperTests(SimpleTestCase):
+    def test_storage_gb_setting_rejects_unusable_values_and_caps_large_ones(self):
+        for raw in (None, '', 'abc', 'nan', 'inf', '-1', '0'):
+            self.assertIsNone(storage_gb_setting(raw), raw)
+        self.assertEqual(storage_gb_setting('5'), 5.0)
+        self.assertEqual(storage_gb_setting('1e9'), float(MAX_STORAGE_GB))
+
+    def test_validate_storage_gb(self):
+        self.assertIsNone(validate_storage_gb('systemStorageLimit', ''))
+        self.assertIsNone(validate_storage_gb('systemStorageLimit', '0'))
+        self.assertIsNone(validate_storage_gb('defaultStorageQuota', '10240'))
+        for key, bad in (('defaultStorageQuota', ''), ('defaultStorageQuota', '0'), ('systemStorageLimit', '-1'),
+                         ('systemStorageLimit', 'nan'), ('defaultStorageQuota', '10241')):
+            self.assertIsNotNone(validate_storage_gb(key, bad), (key, bad))
+
+    def test_quota_bytes_from_setting_falls_back(self):
+        self.assertEqual(quota_bytes_from_setting('nan', 123), 123)
+        self.assertEqual(quota_bytes_from_setting(None, 123), 123)
+        self.assertEqual(quota_bytes_from_setting('2', 123), 2 * GB)
+        self.assertEqual(quota_bytes_from_setting('1e308', 123), MAX_STORAGE_GB * GB)
 
 
 class AuditLogTests(BaseAPITestCase):

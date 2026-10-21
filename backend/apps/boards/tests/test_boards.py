@@ -2,8 +2,10 @@
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 
+from apps.accounts.models import SystemSettings
 from apps.boards.models import Board, BoardShare
 from apps.courses.models import Course, Enrollment
+from apps.files.storage import calculate_content_size
 from apps.testutils import BaseAPITestCase, make_user
 
 User = get_user_model()
@@ -302,6 +304,81 @@ class QuizDataTests(BaseAPITestCase):
         stored = Board.objects.get(id=copy.data['id'])
         self.assertEqual(list(stored.content['responses'].keys()), [str(self.s2.id)])
         self.assertIsNone(stored.course)
+
+
+class QuizStorageTests(BaseAPITestCase):
+    """Quiz answers are paid for by the quiz owner, through the same quota check as every other write."""
+
+    def setUp(self):
+        super().setUp()
+        self.teacher = make_user('teach2', role='lecturer')
+        self.student = make_user('stud2')
+        content = {'questions': [{'id': 'q1', 'correctAnswer': 1}],
+                   'quizSettings': {'allowRetake': False}, 'responses': {}}
+        self.quiz = make_board(self.teacher, 'Quiz', board_type='quiz', content=content,
+                               content_size=calculate_content_size(content))
+        BoardShare.objects.create(board=self.quiz, user=self.student, permission='view')
+        self.base_used = calculate_content_size(content)  # the quiz itself, charged to the owner
+        User.objects.filter(pk=self.teacher.pk).update(storage_used=self.base_used)
+        self.url = f'/api/boards/{self.quiz.id}/submit-quiz-response/'
+
+    def _submit(self):
+        return self.as_user(self.student).post(
+            self.url, {'response': {'answers': {'q1': 1}, 'score': 1}}, format='json')
+
+    def _set_owner_quota(self, quota):
+        User.objects.filter(pk=self.teacher.pk).update(storage_quota=quota)
+
+    def test_answers_are_charged_to_the_quiz_owner(self):
+        response = self._submit()
+        self.assertEqual(response.status_code, 200, response.content)
+        self.teacher.refresh_from_db()
+        self.student.refresh_from_db()
+        self.quiz.refresh_from_db()
+        self.assertGreater(self.quiz.content_size, 0)
+        self.assertEqual(self.teacher.storage_used, self.quiz.content_size)
+        self.assertEqual(self.student.storage_used, 0)
+
+    def test_owner_over_quota_rejects_the_answer_and_saves_nothing(self):
+        self._set_owner_quota(1)
+        before = self.quiz.content_size
+        response = self._submit()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.data)
+        self.assertIn("lecturer's storage is full", response.data['error'])
+        self.quiz.refresh_from_db()
+        self.assertEqual(self.quiz.content['responses'], {})
+        self.assertEqual(self.quiz.content_size, before)
+        self.teacher.refresh_from_db()
+        self.assertEqual(self.teacher.storage_used, self.base_used)
+
+    def test_rejected_student_can_answer_once_the_owner_has_space(self):
+        self._set_owner_quota(1)
+        self.assertEqual(self._submit().status_code, 400)
+        self._set_owner_quota(5368709120)
+        # The rejected attempt did not count as a submission, so the first real answer is still allowed.
+        self.assertEqual(self._submit().status_code, 200)
+
+    def test_system_limit_rejection_has_its_own_message(self):
+        # The system total is 1 GB and nearly all of it is taken by someone else, so the owner's own quota still has
+        # room but the system limit does not: the rejection must name the system limit.
+        limit_bytes = 1024 ** 3
+        SystemSettings.set_setting('systemStorageLimit', '1')
+        other = make_user('hogger')
+        User.objects.filter(pk=other.pk).update(storage_used=limit_bytes - 5)
+        response = self._submit()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('system storage limit', response.data['error'])
+        self.quiz.refresh_from_db()
+        self.assertEqual(self.quiz.content['responses'], {})
+
+    def test_answers_to_an_archived_quiz_are_not_charged(self):
+        # An archived quiz is not counted (its content was given back when it was archived), so an answer is free.
+        Board.objects.filter(pk=self.quiz.pk).update(is_archived=True)
+        User.objects.filter(pk=self.teacher.pk).update(storage_used=0)
+        self.assertEqual(self._submit().status_code, 200)
+        self.teacher.refresh_from_db()
+        self.assertEqual(self.teacher.storage_used, 0)
 
 
 class InviteLinkTests(BaseAPITestCase):

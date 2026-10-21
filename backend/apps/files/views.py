@@ -19,21 +19,30 @@ from .security import (
     KIND_FILE, KIND_FILE_THUMB, delete_stored_file, signed_media_url,
 )
 from .serializers import FileSerializer, MEDIA_REF_PREFIX
-from .storage import charge_storage, update_user_storage, QuotaExceeded
+from .storage import (
+    charge_storage, update_user_storage, QuotaExceeded, file_counts_toward_storage, get_effective_quota,
+    get_system_limit_gb, get_system_limit_bytes, live_file_q,
+)
 
 User = get_user_model()
 
 
 def soft_delete_file(file_obj):
-    """Mark a file deleted, give the space back to its owner and remove the bytes from disk."""
+    """Mark a file deleted, give the space back to its uploader and remove the bytes from disk.
+
+    Returns the number of bytes given back. A file on an archived board gives nothing back: it was already returned
+    when the board was archived, and restore charges only the files that are not deleted."""
     if file_obj.is_deleted:
-        return
+        return 0
     with transaction.atomic():
+        counted = file_counts_toward_storage(file_obj)
         file_obj.is_deleted = True
         file_obj.save(update_fields=['is_deleted', 'updated_at'])
-        update_user_storage(file_obj.uploaded_by, -file_obj.file_size)
+        if counted:
+            update_user_storage(file_obj.uploaded_by, -file_obj.file_size)
         stored = [f for f in (file_obj.file, file_obj.thumbnail) if f and f.name]
         transaction.on_commit(lambda: [delete_stored_file(f) for f in stored])
+    return file_obj.file_size if counted else 0
 
 
 class FileViewSet(viewsets.ModelViewSet):
@@ -45,11 +54,14 @@ class FileViewSet(viewsets.ModelViewSet):
         return File.objects.filter(uploaded_by=self.request.user, is_deleted=False)
 
     def perform_create(self, serializer):
-        from apps.files.storage import get_effective_quota
-
         file_obj = serializer.validated_data.get('file')
+        board = serializer.validated_data.get('board')
         user = self.request.user
         file_size = file_obj.size if file_obj else 0
+
+        # A file on an archived board would be charged while the board is not counted, so it is refused.
+        if board is not None and board.is_archived:
+            raise ValidationError('This board is archived. Restore it before attaching files.')
 
         # The quota check and the charge happen under a row lock, so parallel uploads cannot overshoot the limit.
         with transaction.atomic():
@@ -71,7 +83,10 @@ class FileViewSet(viewsets.ModelViewSet):
             elif pct >= 80:
                 warning_level = 80
 
-            if warning_level:
+            # One warning at a time: while an unread storage warning exists, a new one is not added (no spam on every
+            # upload). Once the user has read it, the next crossing creates a fresh one.
+            already_warned = Notification.objects.filter(user=user, type='storage_warning', is_read=False).exists()
+            if warning_level and not already_warned:
                 Notification.objects.create(
                     user=user,
                     type='storage_warning',
@@ -103,7 +118,6 @@ class FileViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def usage(self, request):
         """Get storage usage for current user (quota capped by system limit)"""
-        from apps.files.storage import get_effective_quota
         user = request.user
         effective_quota = get_effective_quota(user)
         return Response({
@@ -211,7 +225,7 @@ class AdminFileDeleteView(APIView):
 
         owner = file_obj.uploaded_by
         # Soft-delete, return the space and remove the stored bytes
-        soft_delete_file(file_obj)
+        freed = soft_delete_file(file_obj)
 
         # Notify the file owner
         Notification.objects.create(
@@ -231,7 +245,7 @@ class AdminFileDeleteView(APIView):
 
         return Response({
             'message': f'File "{file_obj.name}" deleted successfully.',
-            'storage_freed': file_obj.file_size,
+            'storage_freed': freed,
         })
 
 
@@ -247,12 +261,14 @@ class StorageStatsView(APIView):
         if request.user.role != 'admin':
             return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
 
-        all_files = File.objects.filter(is_deleted=False)
+        # Archived boards are excluded, the same as storage_used: their content and files were given back when archived.
+        all_files = File.objects.filter(is_deleted=False).filter(live_file_q())
         file_total_size = all_files.aggregate(total=Sum('file_size'))['total'] or 0
         total_count = all_files.count()
 
-        # Board content sizes
-        board_content_size = Board.objects.aggregate(total=Sum('content_size'))['total'] or 0
+        # Board content sizes (non-archived boards only)
+        board_content_size = Board.objects.filter(is_archived=False).aggregate(
+            total=Sum('content_size'))['total'] or 0
 
         total_size = file_total_size + board_content_size
 
@@ -271,7 +287,7 @@ class StorageStatsView(APIView):
             })
 
         # Add board content as a storage category
-        board_count = Board.objects.filter(content_size__gt=0).count()
+        board_count = Board.objects.filter(is_archived=False, content_size__gt=0).count()
         type_stats.append({
             'type': 'Board Content',
             'file_type': 'board_content',
@@ -284,18 +300,8 @@ class StorageStatsView(APIView):
         total_quota = User.objects.aggregate(total=Sum('storage_quota'))['total'] or 0
 
         # System-wide storage limit
-        from apps.accounts.models import SystemSettings
-        system_limit_bytes = None
-        system_limit_gb = None
-        limit_str = SystemSettings.objects.filter(key='systemStorageLimit').values_list('value', flat=True).first()
-        if limit_str:
-            try:
-                limit_gb = float(limit_str)
-                if limit_gb > 0:
-                    system_limit_bytes = int(limit_gb * (1024 ** 3))
-                    system_limit_gb = limit_gb
-            except (ValueError, TypeError):
-                pass
+        system_limit_gb = get_system_limit_gb()
+        system_limit_bytes = get_system_limit_bytes()
 
         # Effective limit: system limit if set, otherwise sum of all user quotas
         effective_limit = system_limit_bytes if system_limit_bytes else total_quota
@@ -352,21 +358,12 @@ class UserStorageBreakdownView(APIView):
             return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
 
         from apps.boards.models import Board
-        from apps.accounts.models import SystemSettings
 
         sort_by = request.query_params.get('sort', 'storage_used')
         order = request.query_params.get('order', 'desc')
 
         # Get system storage limit for capping user quotas
-        system_limit_bytes = None
-        limit_str = SystemSettings.objects.filter(key='systemStorageLimit').values_list('value', flat=True).first()
-        if limit_str:
-            try:
-                limit_gb = float(limit_str)
-                if limit_gb > 0:
-                    system_limit_bytes = int(limit_gb * (1024 ** 3))
-            except (ValueError, TypeError):
-                pass
+        system_limit_bytes = get_system_limit_bytes()
 
         users = User.objects.all().values(
             'id', 'username', 'first_name', 'last_name', 'email',
@@ -375,7 +372,8 @@ class UserStorageBreakdownView(APIView):
 
         result = []
         for u in users:
-            user_files = File.objects.filter(uploaded_by_id=u['id'], is_deleted=False)
+            # Same rules as storage_used: live files this user uploaded, and non-archived boards this user owns.
+            user_files = File.objects.filter(uploaded_by_id=u['id'], is_deleted=False).filter(live_file_q())
             breakdown = {}
             for file_type, label in File.FILE_TYPE_CHOICES:
                 type_size = user_files.filter(file_type=file_type).aggregate(total=Sum('file_size'))['total'] or 0
@@ -384,10 +382,9 @@ class UserStorageBreakdownView(APIView):
                     breakdown[file_type] = {'size_bytes': type_size, 'count': type_count}
 
             # Include board content storage
-            board_content_size = Board.objects.filter(
-                owner_id=u['id']
-            ).aggregate(total=Sum('content_size'))['total'] or 0
-            board_count = Board.objects.filter(owner_id=u['id'], content_size__gt=0).count()
+            owned_boards = Board.objects.filter(owner_id=u['id'], is_archived=False)
+            board_content_size = owned_boards.aggregate(total=Sum('content_size'))['total'] or 0
+            board_count = owned_boards.filter(content_size__gt=0).count()
             if board_count > 0:
                 breakdown['board_content'] = {'size_bytes': board_content_size, 'count': board_count}
 

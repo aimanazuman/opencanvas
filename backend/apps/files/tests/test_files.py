@@ -1,18 +1,21 @@
-"""OC-05 (safe uploads and signed downloads), OC-11 (file API fields, quota, deletion)."""
+"""OC-05 (safe uploads and signed downloads), OC-11 (file API fields, quota, deletion), storage accounting."""
 import io
 import re
 import zipfile
+from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.test import override_settings
 
-from apps.boards.models import Board, BoardShare
+from apps.accounts.models import Notification
+from apps.boards.models import Board, BoardShare, BoardVersion
 from apps.files.models import File
 from apps.files.security import make_media_token, sniff_upload
-from apps.files.storage import update_user_storage
+from apps.files.storage import calculate_content_size, storage_truth_for_user, update_user_storage
 from apps.testutils import BaseAPITestCase, make_user, pdf_upload, png_bytes, png_upload
 
 User = get_user_model()
@@ -361,6 +364,216 @@ class DeletionTests(BaseAPITestCase):
         self.assertEqual(self.client.delete(f'/api/files/{stored.id}/').status_code, 404)
         self.owner.refresh_from_db()
         self.assertEqual(self.owner.storage_used, other.file_size)
+
+
+class StoragePayerTests(BaseAPITestCase):
+    """Each file is paid for by its uploader, each board's content by its owner. Archive, restore, delete, warnings and
+    the admin stats all follow that rule."""
+
+    def setUp(self):
+        super().setUp()
+        self.owner = make_user('owner')
+        self.uploader = make_user('uploader')
+        self.admin = make_user('boss', role='admin')
+        self.board = self._board(self.owner, 'x' * 300)
+        BoardShare.objects.create(board=self.board, user=self.uploader, permission='edit')
+        self.file_size = len(png_bytes())
+        self.owner_client = self.as_user(self.owner)
+        self.up_client = self.as_user(self.uploader)
+
+    def _board(self, owner, text):
+        content = {'text': text}
+        board = Board.objects.create(owner=owner, name='B', content=content,
+                                     content_size=calculate_content_size(content))
+        update_user_storage(owner, board.content_size)
+        return board
+
+    def _upload_to_board(self):
+        response = upload(self.up_client, png_upload(), board=self.board.id)
+        self.assertEqual(response.status_code, 201, response.content)
+        return File.objects.get(id=response.data['id'])
+
+    def _used(self, user):
+        user.refresh_from_db()
+        return user.storage_used
+
+    def _archive(self, board=None):
+        response = self.owner_client.post(f'/api/boards/{(board or self.board).id}/archive/')
+        self.assertEqual(response.status_code, 200, response.content)
+        return response
+
+    def test_archive_refunds_the_owner_and_each_uploader_and_restore_charges_them_again(self):
+        self._upload_to_board()
+        content_size = self.board.content_size
+        self.assertEqual(self._used(self.owner), content_size)
+        self.assertEqual(self._used(self.uploader), self.file_size)
+        archived = self._archive()
+        self.assertEqual(archived.data['storage_freed'], content_size + self.file_size)
+        self.assertEqual(self._used(self.owner), 0)
+        self.assertEqual(self._used(self.uploader), 0)
+        self.assertEqual(self.owner_client.post(f'/api/boards/{self.board.id}/restore/').status_code, 200)
+        self.assertEqual(self._used(self.owner), content_size)
+        self.assertEqual(self._used(self.uploader), self.file_size)
+
+    def test_deleting_a_board_refunds_the_owner_and_each_uploader(self):
+        self._upload_to_board()
+        self.assertEqual(self.owner_client.delete(f'/api/boards/{self.board.id}/').status_code, 204)
+        self.assertEqual(self._used(self.owner), 0)
+        self.assertEqual(self._used(self.uploader), 0)
+
+    def test_archive_then_delete_file_then_restore_keeps_the_counters_right(self):
+        stored = self._upload_to_board()
+        content_size = self.board.content_size
+        self._archive()
+        self.assertEqual(self.up_client.delete(f'/api/files/{stored.id}/').status_code, 204)
+        # The file was already refunded at archive time, so deleting it now refunds nothing.
+        self.assertEqual(self._used(self.uploader), 0)
+        self.assertEqual(self._used(self.owner), 0)
+        self.assertEqual(self.owner_client.post(f'/api/boards/{self.board.id}/restore/').status_code, 200)
+        # Restore charges only the files that are still live: the deleted one is not charged.
+        self.assertEqual(self._used(self.owner), content_size)
+        self.assertEqual(self._used(self.uploader), 0)
+        self.assertEqual(self._used(self.owner), storage_truth_for_user(self.owner.id))
+        self.assertEqual(self._used(self.uploader), storage_truth_for_user(self.uploader.id))
+
+    def test_admin_delete_of_a_file_on_an_archived_board_refunds_nothing(self):
+        stored = self._upload_to_board()
+        self._archive()
+        response = self.as_user(self.admin).delete(f'/api/files/admin-delete/{stored.id}/', {'reason': 'Policy'},
+                                                   format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data['storage_freed'], 0)
+        self.assertEqual(self._used(self.uploader), 0)
+
+    def test_deleting_a_file_on_a_live_board_refunds_its_uploader(self):
+        stored = self._upload_to_board()
+        self.assertEqual(self.up_client.delete(f'/api/files/{stored.id}/').status_code, 204)
+        self.assertEqual(self._used(self.uploader), 0)
+        self.assertEqual(self._used(self.owner), self.board.content_size)
+
+    def test_restore_is_refused_and_rolled_back_when_an_uploader_is_over_quota(self):
+        self._upload_to_board()
+        self._archive()
+        User.objects.filter(pk=self.uploader.pk).update(storage_quota=self.file_size - 1)
+        response = self.owner_client.post(f'/api/boards/{self.board.id}/restore/')
+        self.assertEqual(response.status_code, 400)
+        self.board.refresh_from_db()
+        self.assertTrue(self.board.is_archived)
+        self.assertEqual(self._used(self.owner), 0)  # the owner's share of the restore was rolled back too
+        self.assertEqual(self._used(self.uploader), 0)
+
+    def test_upload_to_an_archived_board_is_refused(self):
+        self._archive()
+        response = upload(self.up_client, png_upload(), board=self.board.id)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('archived', response.content.decode())
+        self.assertEqual(File.objects.count(), 0)
+        self.assertEqual(self._used(self.uploader), 0)
+
+    def test_storage_warning_is_not_repeated_while_an_unread_one_exists(self):
+        # The client holds this user object, so the quota is set on it too (the view reads the quota from it).
+        self.uploader.storage_quota = self.file_size * 100
+        self.uploader.save(update_fields=['storage_quota'])
+        User.objects.filter(pk=self.uploader.pk).update(storage_used=self.file_size * 90)
+
+        def warnings():
+            return Notification.objects.filter(user=self.uploader, type='storage_warning')
+
+        self._upload_to_board()  # 91%
+        self._upload_to_board()  # 92%, still above 90%, but an unread warning exists
+        self.assertEqual(warnings().count(), 1)
+        warnings().update(is_read=True)
+        self._upload_to_board()  # 93%: the earlier warning was read, so a new one is created
+        self.assertEqual(warnings().count(), 2)
+
+    def test_admin_stats_leave_out_archived_boards(self):
+        live = self._board(self.owner, 'y' * 100)
+        self._upload_to_board()
+        self._archive()
+        stats = self.as_user(self.admin).get('/api/files/storage-stats/').data
+        self.assertEqual(stats['total_used_bytes'], live.content_size)
+        rows = {row['username']: row for row in self.as_user(self.admin).get('/api/files/user-storage/').data}
+        self.assertEqual(rows['owner']['storage_used'], live.content_size)
+        self.assertEqual(rows['owner']['breakdown'].get('board_content', {}).get('size_bytes', 0), live.content_size)
+        self.assertEqual(rows['uploader']['storage_used'], 0)
+        self.assertEqual(rows['uploader']['file_count'], 0)
+
+
+class RecalculateStorageTests(BaseAPITestCase):
+    """The recalculate_storage command: dry run by default, --apply writes, --report-orphans only lists."""
+
+    def setUp(self):
+        super().setUp()
+        self.owner = make_user('owner')
+        self.uploader = make_user('uploader')
+        content = {'text': 'z' * 200}
+        self.board = Board.objects.create(owner=self.owner, name='B', content=content,
+                                          content_size=calculate_content_size(content))
+        BoardShare.objects.create(board=self.board, user=self.uploader, permission='edit')
+        self.up_client = self.as_user(self.uploader)
+
+    def _run(self, *args):
+        out = StringIO()
+        call_command('recalculate_storage', *args, stdout=out)
+        return out.getvalue()
+
+    def _file_on_board(self):
+        response = upload(self.up_client, png_upload(), board=self.board.id)
+        self.assertEqual(response.status_code, 201, response.content)
+        return File.objects.get(id=response.data['id'])
+
+    def _set_stored(self, user, value):
+        User.objects.filter(pk=user.pk).update(storage_used=value)
+
+    def _stored(self, user):
+        return User.objects.get(pk=user.pk).storage_used
+
+    def test_dry_run_reports_the_drift_and_changes_nothing(self):
+        self._file_on_board()
+        self._set_stored(self.owner, 999)
+        out = self._run()
+        self.assertIn('Dry run', out)
+        self.assertIn('owner', out)
+        self.assertEqual(self._stored(self.owner), 999)
+
+    def test_apply_writes_the_recalculated_values_and_a_second_run_finds_nothing(self):
+        stored = self._file_on_board()
+        self._set_stored(self.owner, 999)
+        self._set_stored(self.uploader, 0)
+        out = self._run('--apply')
+        self.assertIn('Applied: 2 user(s) updated.', out)
+        self.assertEqual(self._stored(self.owner), self.board.content_size)
+        self.assertEqual(self._stored(self.uploader), stored.file_size)
+        self.assertIn('No differences', self._run())
+
+    def test_apply_removes_archived_board_content_that_was_never_refunded(self):
+        self._file_on_board()
+        Board.objects.filter(pk=self.board.pk).update(is_archived=True)  # archived without a refund: drift
+        self._run('--apply')
+        self.assertEqual(self._stored(self.owner), 0)
+        self.assertEqual(self._stored(self.uploader), 0)
+
+    def test_orphan_report_lists_unreferenced_board_files_and_deletes_nothing(self):
+        referenced = self._file_on_board()
+        orphan = self._file_on_board()
+        library = upload(self.up_client, png_upload())  # no board: never reported
+        self.assertEqual(library.status_code, 201)
+        self.board.content = {'blocks': [{'src': 'ocmedia:' + referenced.file.name}]}
+        self.board.save()
+        out = self._run('--report-orphans')
+        self.assertIn('Possible orphan uploads (board files that no board content or version refers to): 1', out)
+        self.assertIn(orphan.file.name, out)
+        self.assertNotIn(referenced.file.name, out)
+        self.assertNotIn(File.objects.get(id=library.data['id']).file.name, out)
+        self.assertTrue(File.objects.filter(pk=orphan.pk, is_deleted=False).exists())
+        self.assertTrue(default_storage.exists(orphan.file.name))
+
+    def test_a_board_version_keeps_a_file_from_being_reported(self):
+        kept = self._file_on_board()
+        BoardVersion.objects.create(board=self.board, version_number=1,
+                                    content={'src': 'https://host/media/' + kept.file.name})
+        out = self._run('--report-orphans')
+        self.assertNotIn(kept.file.name, out)
 
 
 class RefFormatTests(BaseAPITestCase):

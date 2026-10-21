@@ -13,6 +13,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
 from apps.courses.models import Enrollment
+from apps.files.storage import model_default_quota, quota_bytes_from_setting
 from .emails import send_welcome_email, build_set_password_url
 from .models import SystemSettings, Notification
 
@@ -207,12 +208,9 @@ def process_bulk_import(rows, course=None, send_emails=True, created_by=None, re
     else:
         section_errors = []
 
-    # Get default storage quota
-    try:
-        default_gb = float(SystemSettings.get_all_settings().get('defaultStorageQuota', '5'))
-        default_quota = int(default_gb * (1024 ** 3))
-    except (ValueError, TypeError):
-        default_quota = 5368709120
+    # Default storage quota for the new accounts (an unusable setting keeps the model default)
+    default_quota = quota_bytes_from_setting(SystemSettings.get_all_settings().get('defaultStorageQuota', '5'),
+                                             model_default_quota())
 
     results = {
         'created': [],

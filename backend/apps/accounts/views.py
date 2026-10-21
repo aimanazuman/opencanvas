@@ -19,6 +19,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from opencanvas.clientip import get_client_ip
 from opencanvas.middleware import clear_maintenance_cache
+from apps.files.storage import model_default_quota, quota_bytes_from_setting, validate_storage_gb
 from opencanvas.throttling import (
     with_defaults, LoginThrottle, RegisterThrottle, PasswordResetThrottle, ResendVerificationThrottle,
     VerifyEmailThrottle, GuestCreateThrottle,
@@ -91,12 +92,9 @@ class RegisterView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        # Apply default storage quota from system settings
-        try:
-            default_gb = float(all_settings.get('defaultStorageQuota', '5'))
-            user.storage_quota = int(default_gb * (1024 ** 3))
-        except (ValueError, TypeError):
-            pass
+        # Apply default storage quota from system settings (an unusable value keeps the model default)
+        user.storage_quota = quota_bytes_from_setting(all_settings.get('defaultStorageQuota', '5'),
+                                                      model_default_quota())
 
         require_verification = all_settings.get('requireEmailVerification', 'true').lower() == 'true'
 
@@ -461,6 +459,13 @@ class SystemSettingsView(APIView):
         for key, value in data.items():
             if isinstance(value, (dict, list)) or len(str(value)) > MAX_SETTING_VALUE_LENGTH:
                 return Response({'error': f'Invalid value for {key}.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Storage sizes are in GB: they must be finite, positive and within the 10 TiB ceiling (checked before anything
+        # is written, so a bad value leaves every setting unchanged).
+        for key in ('defaultStorageQuota', 'systemStorageLimit'):
+            if key in data:
+                problem = validate_storage_gb(key, data[key])
+                if problem:
+                    return Response({'error': problem}, status=status.HTTP_400_BAD_REQUEST)
         changed = {}
         for key, value in data.items():
             SystemSettings.set_setting(key, value, user=request.user)
@@ -660,12 +665,9 @@ class GuestLoginView(APIView):
         user.set_unusable_password()
         user.guest_expires_at = timezone.now() + timedelta(days=30)
 
-        # Apply default storage quota from system settings
-        try:
-            default_gb = float(SystemSettings.get_all_settings().get('defaultStorageQuota', '5'))
-            user.storage_quota = int(default_gb * (1024 ** 3))
-        except (ValueError, TypeError):
-            pass
+        # Apply default storage quota from system settings (an unusable value keeps the model default)
+        user.storage_quota = quota_bytes_from_setting(
+            SystemSettings.get_all_settings().get('defaultStorageQuota', '5'), model_default_quota())
 
         user.save()
 

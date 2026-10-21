@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from django.conf import settings as django_settings
 from django.db import transaction
-from django.db.models import F, Q, Sum
+from django.db.models import F, Q
 from django.utils import timezone
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
@@ -15,13 +15,24 @@ from rest_framework.views import APIView
 from apps.accounts.audit import log_action
 from apps.accounts.emails import send_board_shared_email
 from apps.accounts.notifications import notify_board_shared, notify_invite_accepted
-from apps.files.storage import calculate_content_size, update_user_storage, charge_storage, QuotaExceeded
+from apps.files.storage import (
+    calculate_content_size, update_user_storage, charge_storage, charge_board_storage, refund_board_storage,
+    QuotaExceeded,
+)
 from .access import (
     LEVEL_RANK, get_board_access, content_for_user,
 )
 from .models import Board, BoardShare, StarredBoard, BoardVersion, BoardInviteLink
 from .permissions import IsBoardOwnerOrShared
 from .serializers import BoardSerializer, BoardShareSerializer, BoardVersionSerializer, BoardInviteLinkSerializer
+
+# Shown when a quiz answer cannot be saved because the storage of the quiz's owner is full (see submit_quiz_response).
+QUIZ_QUOTA_MESSAGES = {
+    'user': "This quiz cannot take answers right now because the lecturer's storage is full. "
+            "Please ask the lecturer to free up space, then try again.",
+    'system': "The system storage limit has been reached, so this quiz cannot take answers right now. "
+              "Please contact an administrator.",
+}
 
 
 def _int_or_none(value):
@@ -149,23 +160,13 @@ class BoardViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         log_action(self.request.user, 'delete', 'board', instance.id, {'name': instance.name}, self.request)
-        size = instance.content_size or 0
-        owner = instance.owner
-
-        # Calculate file storage to free (files will be CASCADE deleted)
-        from apps.files.models import File
-        file_size_total = File.objects.filter(
-            board=instance, is_deleted=False
-        ).aggregate(total=Sum('file_size'))['total'] or 0
 
         with transaction.atomic():
-            was_archived = instance.is_archived
+            # An archived board already gave its storage back when it was archived. Otherwise the owner gets the content
+            # back and each uploader gets their files back. This runs before the delete, which removes the files.
+            if not instance.is_archived:
+                refund_board_storage(instance)
             instance.delete()  # a post_delete signal removes the attached files from disk
-            # For archived boards, content/file storage was already freed during archive
-            if not was_archived:
-                total_freed = size + file_size_total
-                if total_freed > 0:
-                    update_user_storage(owner, -total_freed)
 
     def _capped(self, queryset):
         return queryset[:int(django_settings.MAX_LIST_RESULTS)]
@@ -226,25 +227,14 @@ class BoardViewSet(viewsets.ModelViewSet):
         if board.is_archived:
             return Response({'error': 'This board is already archived'}, status=status.HTTP_400_BAD_REQUEST)
 
-        from apps.files.models import File
         with transaction.atomic():
             board.is_archived = True
             board.save()
+            # Give the board back to cold storage: the content goes back to the owner, each file to its uploader.
+            freed = refund_board_storage(board)
 
-            # Return board content storage to user (cold storage)
-            size = board.content_size or 0
-            if size > 0:
-                update_user_storage(board.owner, -size)
-
-            # Also return storage for files attached to this board
-            file_size_total = File.objects.filter(
-                board=board, is_deleted=False
-            ).aggregate(total=Sum('file_size'))['total'] or 0
-            if file_size_total > 0:
-                update_user_storage(board.owner, -file_size_total)
-
-        log_action(request.user, 'update', 'board', board.id, {'action': 'archive', 'storage_freed': size + file_size_total}, request)
-        return Response({'is_archived': True, 'message': 'Board archived', 'storage_freed': size + file_size_total})
+        log_action(request.user, 'update', 'board', board.id, {'action': 'archive', 'storage_freed': freed}, request)
+        return Response({'is_archived': True, 'message': 'Board archived', 'storage_freed': freed})
 
     @action(detail=True, methods=['post'])
     def restore(self, request, pk=None):
@@ -258,20 +248,13 @@ class BoardViewSet(viewsets.ModelViewSet):
         if not board.is_archived:
             return Response({'error': 'This board is not archived'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Re-charge board content storage
-        size = board.content_size or 0
-        from apps.files.models import File
-        file_size_total = File.objects.filter(
-            board=board, is_deleted=False
-        ).aggregate(total=Sum('file_size'))['total'] or 0
-        total_restore = size + file_size_total
-
+        # Charge the content back to the owner and each live file back to its uploader. The board row is written first
+        # (same lock order as archive). Any payer over quota rolls the whole restore back.
         try:
             with transaction.atomic():
-                if total_restore > 0:
-                    charge_storage(board.owner, total_restore)
                 board.is_archived = False
                 board.save()
+                charge_board_storage(board)
         except QuotaExceeded:
             return Response(
                 {'error': 'Not enough storage quota to restore this board. Please free up space first.'},
@@ -402,48 +385,61 @@ class BoardViewSet(viewsets.ModelViewSet):
         if len(json.dumps(response_data).encode('utf-8')) > django_settings.QUIZ_RESPONSE_MAX_BYTES:
             return Response({'error': 'Your response is too large.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        with transaction.atomic():
-            # Lock the row so two students submitting at once cannot overwrite each other's answers.
-            board = Board.objects.select_for_update().select_related('owner', 'course').filter(pk=pk_int).first()
-            if board is None:
-                return Response({'error': 'Board not found.'}, status=status.HTTP_404_NOT_FOUND)
+        # Quota rule for quizzes: the board owner pays for the answers, so an answer that would take the owner over their
+        # quota (or the system limit) is REJECTED with HTTP 400 and {"error": ...}, the same style as duplicate. The
+        # quota error is raised before the board row is written, so nothing is saved, the student's retake state is
+        # unchanged and the student can try again once the owner has freed space. Shrinking an answer always succeeds.
+        try:
+            with transaction.atomic():
+                # Lock the row so two students submitting at once cannot overwrite each other's answers.
+                board = Board.objects.select_for_update().select_related('owner', 'course').filter(pk=pk_int).first()
+                if board is None:
+                    return Response({'error': 'Board not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-            # Verify the user has at least view access to this board
-            if get_board_access(user, board) is None:
-                return Response({'error': 'You do not have access to this board.'}, status=status.HTTP_403_FORBIDDEN)
+                # Verify the user has at least view access to this board
+                if get_board_access(user, board) is None:
+                    return Response({'error': 'You do not have access to this board.'},
+                                    status=status.HTTP_403_FORBIDDEN)
 
-            # Verify this is a quiz board
-            if board.board_type != 'quiz':
-                return Response({'error': 'This board is not a quiz.'}, status=status.HTTP_400_BAD_REQUEST)
+                # Verify this is a quiz board
+                if board.board_type != 'quiz':
+                    return Response({'error': 'This board is not a quiz.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            user_id = str(user.id)
-            content = board.content if isinstance(board.content, dict) else {}
-            quiz_settings = content.get('quizSettings', {})
-            responses = content.get('responses', {})
-            if not isinstance(responses, dict):
-                responses = {}
+                user_id = str(user.id)
+                content = board.content if isinstance(board.content, dict) else {}
+                quiz_settings = content.get('quizSettings', {})
+                responses = content.get('responses', {})
+                if not isinstance(responses, dict):
+                    responses = {}
 
-            # Check if retake is allowed
-            if user_id in responses and not quiz_settings.get('allowRetake', False):
-                return Response({'error': 'You have already submitted this quiz and retakes are not allowed.'},
-                                status=status.HTTP_400_BAD_REQUEST)
+                # Check if retake is allowed
+                if user_id in responses and not quiz_settings.get('allowRetake', False):
+                    return Response({'error': 'You have already submitted this quiz and retakes are not allowed.'},
+                                    status=status.HTTP_400_BAD_REQUEST)
 
-            # Attach the student's display name so the lecturer leaderboard can show it
-            display_name = f"{user.first_name} {user.last_name}".strip() or user.username
-            response_data['studentName'] = display_name
-            responses[user_id] = response_data
-            content['responses'] = responses
+                # Attach the student's display name so the lecturer leaderboard can show it
+                display_name = f"{user.first_name} {user.last_name}".strip() or user.username
+                response_data['studentName'] = display_name
+                responses[user_id] = response_data
+                content['responses'] = responses
 
-            old_size = board.content_size or 0
-            new_size = calculate_content_size(content)
-            delta = new_size - old_size
+                old_size = board.content_size or 0
+                new_size = calculate_content_size(content)
+                delta = new_size - old_size
 
-            board.content = content
-            board.content_size = new_size
-            board.save()
+                if not board.is_archived:
+                    if delta > 0:
+                        # Checks the owner's quota and system limit under a row lock. Raises QuotaExceeded.
+                        charge_storage(board.owner, delta)
+                    elif delta < 0:
+                        update_user_storage(board.owner, delta)
 
-            if delta != 0 and not board.is_archived:
-                update_user_storage(board.owner, delta)
+                board.content = content
+                board.content_size = new_size
+                board.save()
+        except QuotaExceeded as exc:
+            return Response({'error': QUIZ_QUOTA_MESSAGES.get(exc.scope, exc.message)},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         log_action(user, 'create', 'quiz_response', board.id,
                    {'board_name': board.name, 'score': response_data.get('score')}, request)
